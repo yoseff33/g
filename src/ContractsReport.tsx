@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, Download, Search } from 'lucide-react'
+import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, Download, Search, CalendarClock, Activity } from 'lucide-react'
 
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
@@ -281,6 +281,46 @@ export default function ContractsReport() {
   const totalPaid = filteredReports.reduce((sum, r: any) => sum + Number(r.total_paid), 0)
   const totalRemaining = filteredReports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
 
+  // حسابات نافذة العميل (عداد الأيام)
+  let nextInstallment = null;
+  let firstInstallmentDate = '-';
+  let clientStatus = 'مكتمل السداد';
+  let daysLeftText = '-';
+  let statusColor = 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
+
+  if (viewClient && installments.length > 0) {
+    firstInstallmentDate = installments[0].due_date;
+    const unpaid = installments.filter(i => i.status !== 'paid');
+    
+    if (unpaid.length > 0) {
+      nextInstallment = unpaid[0];
+      const todayStr = new Date().toISOString().split('T')[0];
+      const dueTime = new Date(nextInstallment.due_date).getTime();
+      const todayTime = new Date(todayStr).getTime();
+      const diffDays = Math.ceil((dueTime - todayTime) / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        clientStatus = 'متأخر';
+        statusColor = 'text-red-400 bg-red-400/10 border-red-400/20';
+        daysLeftText = `متأخر منذ ${Math.abs(diffDays)} يوم`;
+      } else if (diffDays === 0) {
+        clientStatus = 'مستحق اليوم';
+        statusColor = 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20';
+        daysLeftText = 'الاستحقاق اليوم';
+      } else if (diffDays === 1) {
+        clientStatus = 'مستحق غداً';
+        statusColor = 'text-blue-400 bg-blue-400/10 border-blue-400/20';
+        daysLeftText = 'باقي يوم واحد';
+      } else {
+        clientStatus = 'غير مستحق';
+        statusColor = 'text-slate-300 bg-slate-800 border-slate-700';
+        daysLeftText = `باقي ${diffDays} يوم`;
+      }
+    } else {
+      daysLeftText = 'تم سداد العقد بالكامل';
+    }
+  }
+
   return (
     <div className="p-4 relative print-container" dir="rtl">
       
@@ -513,6 +553,26 @@ export default function ContractsReport() {
                   <MessageCircle size={16}/> شكر بعد السداد
                 </button>
                 <button onClick={() => setViewClient(null)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-lg"><X size={20}/></button>
+              </div>
+            </div>
+
+            {/* لوحة العدادات الجديدة */}
+            <div className="bg-slate-950 border-b border-slate-800 p-4 flex gap-4">
+              <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                <span className="text-slate-500 text-xs font-bold mb-1">تاريخ أول قسط</span>
+                <span className="text-white font-mono">{firstInstallmentDate}</span>
+              </div>
+              <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                <span className="text-slate-500 text-xs font-bold mb-1">تاريخ القسط القادم</span>
+                <span className="text-white font-mono">{nextInstallment ? nextInstallment.due_date : '-'}</span>
+              </div>
+              <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                <span className="text-slate-500 text-xs font-bold mb-1">عداد الأيام</span>
+                <span className="text-white font-bold">{daysLeftText}</span>
+              </div>
+              <div className={`flex-1 border p-4 rounded-xl flex flex-col items-center justify-center text-center ${statusColor}`}>
+                <span className="text-inherit opacity-80 text-xs font-bold mb-1">حالة العميل</span>
+                <span className="font-black text-lg">{clientStatus}</span>
               </div>
             </div>
 
