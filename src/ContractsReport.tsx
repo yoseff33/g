@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { Plus, Printer, X, FileText } from 'lucide-react'
+import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
@@ -33,6 +33,22 @@ export default function ContractsReport() {
     const { data: invData } = await supabase.from('investors').select('id, name')
     if (invData) setInvestors(invData)
   }
+
+  // دالة إرسال الواتساب المضافة حديثاً
+  const sendWhatsApp = (phone: string, type: 'reminder' | 'today' | 'late', name: string, amount: number, date: string) => {
+    const messages = {
+      reminder: `السلام عليكم أستاذ/ة ${name}، نود تذكيركم بأن موعد استحقاق دفعتكم القادمة سيكون بتاريخ ${date} بمبلغ ${amount} ريال. نأمل التكرم بسدادها في موعدها، ونشكركم على ثقتكم بنا.`,
+      today: `السلام عليكم أستاذ/ة ${name}، نفيدكم بأن دفعتكم المستحقة اليوم بتاريخ ${date} بقيمة ${amount} ريال أصبحت مستحقة. نرجو المبادرة بالسداد، وشكراً لكم.`,
+      late: `السلام عليكم أستاذ/ة ${name}، تشير سجلاتنا إلى وجود قسط مستحق لم يتم سداده حتى الآن، وقيمته ${amount} ريال، وكان تاريخ استحقاقه ${date}. نرجو سرعة السداد لتجنب أي إجراءات أو رسوم وفقاً للعقد. شكراً لتعاونكم.`
+    };
+    
+    // التحقق من وجود رقم جوال قبل فتح الرابط
+    if(phone) {
+       window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(messages[type])}`, '_blank');
+    } else {
+       alert("لا يوجد رقم جوال مسجل لهذا العميل");
+    }
+  };
 
   async function handleAddContract(e: any) {
     e.preventDefault()
@@ -142,6 +158,8 @@ export default function ContractsReport() {
             <div className="space-y-4">
               <p><span className="font-bold text-slate-500">الطرف الأول (المستثمر):</span> <span className="font-black">{contractToPrint.investor_name}</span></p>
               <p><span className="font-bold text-slate-500">الطرف الثاني (العميل):</span> <span className="font-black">{contractToPrint.customer_name}</span></p>
+              {/* تمت إضافة رقم الهوية هنا */}
+              <p><span className="font-bold text-slate-500">رقم الهوية:</span> <span className="font-black">{contractToPrint.customer_id_num || 'غير مسجل'}</span></p>
               <p><span className="font-bold text-slate-500">الكفيل الغارم:</span> <span className="font-black">{contractToPrint.guarantor_name || 'لا يوجد'}</span></p>
             </div>
             <div className="space-y-4">
@@ -212,8 +230,10 @@ export default function ContractsReport() {
           <thead className="bg-slate-800 text-slate-300">
             <tr>
               <th className="p-4 text-right">رقم العقد</th>
-              <th className="p-4 text-right">المستثمر המمول</th>
+              <th className="p-4 text-right">المستثمر الممول</th>
               <th className="p-4 text-right">اسم العميل</th>
+              {/* تمت إضافة عمود الهوية هنا */}
+              <th className="p-4 text-right">رقم الهوية</th>
               <th className="p-4 text-right">الكفيل</th>
               <th className="p-4 text-right">إجمالي العقد</th>
               <th className="p-4 text-right">المدفوع</th>
@@ -229,6 +249,8 @@ export default function ContractsReport() {
                 <td className="p-4 font-mono text-emerald-400">{r.serial_number}</td>
                 <td className="p-4 font-bold text-slate-200">{r.investor_name || 'غير محدد'}</td>
                 <td className="p-4 font-bold text-slate-200">{r.customer_name}</td>
+                {/* عرض رقم الهوية من الداتا */}
+                <td className="p-4 font-mono text-slate-300">{r.customer_id_num || '-'}</td>
                 <td className="p-4 text-slate-400">{r.guarantor_name || '-'}</td>
                 <td className="p-4 font-bold text-blue-400">{r.total_amount}</td>
                 <td className="p-4 font-bold text-emerald-400">{r.total_paid}</td>
@@ -236,14 +258,28 @@ export default function ContractsReport() {
                 <td className="p-4 font-bold text-red-500">{r.late_amount}</td>
                 <td className="p-4 text-slate-300">{r.installment_amount}</td>
                 <td className="p-4 text-center">
-                  <button onClick={() => setContractToPrint(r)} className="p-2 bg-slate-800 hover:bg-emerald-500 hover:text-slate-900 text-slate-400 rounded-lg transition-colors" title="طباعة العقد">
-                    <Printer className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    {/* أزرار الواتساب المضافة */}
+                    <button onClick={() => sendWhatsApp(r.customer_phone, 'reminder', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-blue-500/10 hover:bg-blue-500 hover:text-white text-blue-400 rounded-lg transition-colors" title="إرسال تذكير">
+                      <MessageCircle className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => sendWhatsApp(r.customer_phone, 'today', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500 hover:text-white text-yellow-400 rounded-lg transition-colors" title="استحقاق اليوم">
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => sendWhatsApp(r.customer_phone, 'late', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 rounded-lg transition-colors" title="إشعار تأخير">
+                      <AlertCircle className="w-4 h-4" />
+                    </button>
+                    <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                    {/* زر الطباعة الأصلي */}
+                    <button onClick={() => setContractToPrint(r)} className="p-1.5 bg-slate-800 hover:bg-emerald-500 hover:text-slate-900 text-slate-400 rounded-lg transition-colors" title="طباعة العقد">
+                      <Printer className="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             <tr className="bg-slate-950 font-black">
-              <td className="p-4 text-left" colSpan={4}>الإجمالي الكلي للسوق</td>
+              <td className="p-4 text-left" colSpan={5}>الإجمالي الكلي للسوق</td>
               <td className="p-4 text-blue-400">{totalAmount}</td>
               <td className="p-4 text-emerald-400">{totalPaid}</td>
               <td className="p-4 text-rose-300">{totalRemaining}</td>
