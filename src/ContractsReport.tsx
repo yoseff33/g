@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, Download, Search, CalendarClock, Activity } from 'lucide-react'
+import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, Download, Search } from 'lucide-react'
 
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
