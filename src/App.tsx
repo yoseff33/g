@@ -5,7 +5,7 @@ import {
   BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck, Filter
 } from 'lucide-react'
 
-// Import All 12 Modules
+// Import All 12 Modules + CustomReports
 import DashboardView from './components/DashboardView'
 import InvestorsView from './components/InvestorsView'
 import ContractsView from './components/ContractsView'
@@ -166,7 +166,7 @@ export default function App() {
   const menuItems = [
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
     { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3 },
-    { id: 'custom_reports', label: 'التقارير المخصصة', icon: Filter },
+    { id: 'custom_reports', label: 'التقارير المخصصة', icon: BarChart3 },
     { id: 'investors', label: 'شؤون المستثمرين', icon: Users },
     { id: 'contracts', label: 'العقود الاستثمارية', icon: FileText },
     { id: 'contracts_report', label: 'تقرير عقود التقسيط', icon: FileText },
