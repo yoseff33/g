@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react'
-import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { 
-  LayoutDashboard, Users, FileText, FolderTree, Receipt, DollarSign, Percent, 
-  BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck, Filter
+import React, { useEffect, useState, createContext, useContext } from 'react'
+import { supabase } from './lib/supabase'
+import {
+  LayoutDashboard, Users, FileText, FolderTree, Receipt, DollarSign, Percent,
+  BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck,
+  Bell, Sun, Moon
 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import toast, { Toaster } from 'react-hot-toast'
 
 // Import All 12 Modules + CustomReports
 import DashboardView from './components/DashboardView'
@@ -22,21 +25,39 @@ import AccountantDashboard from './AccountantDashboard'
 import CustomReports from './CustomReports'
 import { Profile } from './types'
 
-type ActiveView = 
-  | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts' 
-  | 'journal_entries' | 'vouchers' | 'distributions' | 'reports' 
+type ActiveView =
+  | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts'
+  | 'journal_entries' | 'vouchers' | 'distributions' | 'reports'
   | 'audit_logs' | 'settings' | 'users' | 'accountant_dashboard' | 'custom_reports'
 
+// ⭐ Theme Context
+const ThemeContext = createContext()
+export const useTheme = () => useContext(ThemeContext)
+
+function ThemeProvider({ children }) {
+  const [dark, setDark] = useState(() => localStorage.getItem('theme') !== 'light')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', !dark)
+    localStorage.setItem('theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark, toggle: () => setDark(d => !d) }}>
+      {children}
+    </ThemeContext.Provider>
+  )
+}
+
 export default function App() {
-  const [session, setSession] = useState<any>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [session, setSession] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
-  // Navigation states
-  const [activeView, setActiveView] = useState<ActiveView>('dashboard')
+  const [activeView, setActiveView] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarMini, setSidebarMini] = useState(false) // للوضع المصغر
 
-  // Authentication Forms states
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -45,39 +66,33 @@ export default function App() {
   const [authSuccess, setAuthSuccess] = useState('')
   const [formLoading, setFormLoading] = useState(false)
 
+  const { dark, toggle: toggleTheme } = useTheme()
+
   useEffect(() => {
-    // 1. Get current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) {
-        fetchProfile(session.user.id)
-      } else {
-        setAuthLoading(false)
-      }
+      if (session) fetchProfile(session.user.id)
+      else setAuthLoading(false)
     })
 
-    // 2. Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) {
-        fetchProfile(session.user.id)
-      } else {
+      if (session) fetchProfile(session.user.id)
+      else {
         setProfile(null)
         setAuthLoading(false)
       }
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
-  async function fetchProfile(userId: string) {
+  async function fetchProfile(userId) {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single()
-      
       if (error) throw error
       setProfile(data)
     } catch (err) {
@@ -87,8 +102,7 @@ export default function App() {
     }
   }
 
-  // Auth Submit Handlers
-  async function handleAuthSubmit(e: React.FormEvent) {
+  async function handleAuthSubmit(e) {
     e.preventDefault()
     setAuthError('')
     setAuthSuccess('')
@@ -96,26 +110,18 @@ export default function App() {
 
     try {
       if (isSignUp) {
-        // Sign Up
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: {
-              full_name: fullName
-            }
-          }
+          options: { data: { full_name: fullName } }
         })
         if (error) throw error
-        
         setAuthSuccess('تم إنشاء حسابك بنجاح! الرجاء مراجعة بريدك الإلكتروني لتأكيده.')
       } else {
-        // Sign In
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       }
-    } catch (err: any) {
-      console.error(err)
+    } catch (err) {
       setAuthError(err.message || 'فشل تنفيذ الإجراء. يرجى التحقق من المدخلات.')
     } finally {
       setFormLoading(false)
@@ -124,45 +130,44 @@ export default function App() {
 
   async function handleLogOut() {
     await supabase.auth.signOut()
+    toast.success('تم إنهاء الجلسة بنجاح')
   }
 
-  // Active View Render Engine
+  // محرك عرض المكونات مع الحركات
   function renderActiveView() {
-    switch (activeView) {
-      case 'dashboard':
-        return <DashboardView />
-      case 'accountant_dashboard':
-        return <AccountantDashboard />
-      case 'custom_reports':
-        return <CustomReports />
-      case 'investors':
-        return <InvestorsView />
-      case 'contracts':
-        return <ContractsView />
-      case 'contracts_report':
-        return <ContractsReport />
-      case 'chart_of_accounts':
-        return <ChartOfAccountsView />
-      case 'journal_entries':
-        return <JournalEntriesView />
-      case 'vouchers':
-        return <ReceiptsPaymentsView />
-      case 'distributions':
-        return <ProfitDistributionView />
-      case 'reports':
-        return <FinancialReportsView />
-      case 'audit_logs':
-        return <AuditLogsView />
-      case 'settings':
-        return <SettingsView />
-      case 'users':
-        return <UsersView />
-      default:
-        return <DashboardView />
+    const views = {
+      dashboard: DashboardView,
+      accountant_dashboard: AccountantDashboard,
+      custom_reports: CustomReports,
+      investors: InvestorsView,
+      contracts: ContractsView,
+      contracts_report: ContractsReport,
+      chart_of_accounts: ChartOfAccountsView,
+      journal_entries: JournalEntriesView,
+      vouchers: ReceiptsPaymentsView,
+      distributions: ProfitDistributionView,
+      reports: FinancialReportsView,
+      audit_logs: AuditLogsView,
+      settings: SettingsView,
+      users: UsersView,
     }
+    const ViewComponent = views[activeView] || DashboardView
+
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeView}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ViewComponent />
+        </motion.div>
+      </AnimatePresence>
+    )
   }
 
-  // Sidebar Menu Config
   const menuItems = [
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
     { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3 },
@@ -180,198 +185,197 @@ export default function App() {
     { id: 'settings', label: 'إعدادات النظام والربط', icon: Settings },
   ]
 
-  // Auth Loading State
+  // شاشة التحميل
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white" id="root_loader">
-        <div className="w-12 h-12 border-4 border-slate-700 border-t-indigo-500 rounded-full animate-spin"></div>
-        <p className="mt-4 text-sm font-semibold tracking-wider text-slate-400">جاري تشخيص الاتصال والتحقق من الجلسة الأمنية...</p>
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
+        <motion.div
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
+          className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center font-black text-2xl text-slate-950 mb-4"
+        >
+          ف
+        </motion.div>
+        <p className="text-sm font-semibold tracking-wider text-slate-400">جاري التحقق من الجلسة...</p>
       </div>
     )
   }
 
-  // Auth Portal Layout (RTL & Tajawal Styling)
+  // واجهة المصادقة
   if (!session) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4" dir="rtl" id="auth_portal">
-        <div className="bg-slate-950/80 backdrop-blur border border-slate-800 rounded-3xl max-w-md w-full overflow-hidden p-8 space-y-6 shadow-2xl">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-black text-white tracking-tight">نظام فزاع المالي ERP</h1>
-            <p className="text-slate-400 text-xs">منصة تدقيق الحسابات وإدارة عوائد الشركاء الاستثمارية</p>
-          </div>
+      <ThemeProvider>
+        <Toaster position="top-left" reverseOrder={false} />
+        <div className={`min-h-screen flex items-center justify-center p-4 ${dark ? 'bg-slate-900' : 'bg-gray-100'}`} dir="rtl">
+          <div className={`backdrop-blur border rounded-3xl max-w-md w-full p-8 space-y-6 shadow-2xl ${dark ? 'bg-slate-950/80 border-slate-800' : 'bg-white border-gray-200'}`}>
+            <div className="text-center space-y-2">
+              <h1 className={`text-3xl font-black ${dark ? 'text-white' : 'text-gray-800'}`}>نظام فزاع المالي ERP</h1>
+              <p className={`text-xs ${dark ? 'text-slate-400' : 'text-gray-500'}`}>منصة تدقيق الحسابات وإدارة عوائد الشركاء الاستثمارية</p>
+            </div>
 
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
-            {authError && (
-              <div className="p-3 bg-red-950/50 text-red-400 text-xs font-semibold rounded-xl border border-red-900/50 flex items-start gap-1.5 leading-normal">
-                <X className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{authError}</span>
-              </div>
-            )}
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {authError && (
+                <div className="p-3 bg-red-50 text-red-600 text-xs font-semibold rounded-xl border border-red-200 flex items-start gap-1.5">
+                  <X className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authError}</span>
+                </div>
+              )}
+              {authSuccess && (
+                <div className="p-3 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-xl border border-emerald-200 flex items-start gap-1.5">
+                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
 
-            {authSuccess && (
-              <div className="p-3 bg-emerald-950/50 text-emerald-400 text-xs font-semibold rounded-xl border border-emerald-900/50 flex items-start gap-1.5 leading-normal">
-                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{authSuccess}</span>
-              </div>
-            )}
+              {isSignUp && (
+                <div className="space-y-1">
+                  <label className={`text-xs font-semibold ${dark ? 'text-slate-400' : 'text-gray-600'}`}>الاسم بالكامل *</label>
+                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="محمد أحمد الراجحي"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 ${dark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-gray-50 border-gray-300 text-gray-800'}`}
+                  />
+                </div>
+              )}
 
-            {isSignUp && (
               <div className="space-y-1">
-                <label className="text-slate-400 text-xs font-semibold">الاسم بالكامل *</label>
-                <input 
-                  type="text" 
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  placeholder="محمد أحمد الراجحي"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                <label className={`text-xs font-semibold ${dark ? 'text-slate-400' : 'text-gray-600'}`}>البريد الإلكتروني للعمل *</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="name@fazza.com"
+                  className={`w-full border rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 font-mono text-left ${dark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-gray-50 border-gray-300 text-gray-800'}`}
                 />
               </div>
-            )}
 
-            <div className="space-y-1">
-              <label className="text-slate-400 text-xs font-semibold">البريد الإلكتروني للعمل *</label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="name@fazza.com"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono text-left"
-              />
+              <div className="space-y-1">
+                <label className={`text-xs font-semibold ${dark ? 'text-slate-400' : 'text-gray-600'}`}>كلمة المرور المشفرة *</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••"
+                  className={`w-full border rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 ${dark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-gray-50 border-gray-300 text-gray-800'}`}
+                />
+              </div>
+
+              <button type="submit" disabled={formLoading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                {formLoading ? 'جاري الاتصال...' : isSignUp ? 'تسجيل حساب جديد' : 'تسجيل الدخول الآمن'}
+              </button>
+            </form>
+
+            <div className="text-center">
+              <button onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); setAuthSuccess('') }}
+                className={`text-xs font-semibold underline ${dark ? 'text-slate-400 hover:text-white' : 'text-gray-500 hover:text-gray-800'}`}
+              >
+                {isSignUp ? 'هل تملك حساباً بالفعل؟ سجل دخولك' : 'هل أنت محاسب جديد؟ أنشئ حساباً'}
+              </button>
             </div>
-
-            <div className="space-y-1">
-              <label className="text-slate-400 text-xs font-semibold">كلمة المرور المشفرة *</label>
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={formLoading}
-              className="w-full bg-slate-200 text-slate-950 hover:bg-white font-bold py-3 rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
-            >
-              {formLoading ? 'جاري الاتصال بقاعدة البيانات...' : isSignUp ? 'تسجيل كحساب محاسبي جديد' : 'تسجيل الدخول الآمن'}
-            </button>
-          </form>
-
-          <div className="text-center">
-            <button 
-              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); setAuthSuccess(''); }}
-              className="text-slate-400 hover:text-white text-xs font-semibold underline"
-            >
-              {isSignUp ? 'هل تملك حساباً بالفعل؟ سجل دخولك هنا' : 'هل أنت محاسب جديد؟ أنشئ حساباً هاهنا'}
-            </button>
           </div>
         </div>
-      </div>
+      </ThemeProvider>
     )
   }
 
-  // Logged-In ERP Application Workspace (RTL)
+  // واجهة التطبيق الرئيسية
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans select-none" dir="rtl" id="fazza_workspace">
-      
-      {/* Sidebar - Desktop Layout */}
-      <aside className={`fixed inset-y-0 right-0 z-40 w-64 bg-slate-900/85 backdrop-blur-md text-white p-6 flex flex-col justify-between border-l border-slate-800 transition-transform duration-350 no-print ${
-        sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
-      }`}>
-        <div className="space-y-8">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-lg text-slate-950">ف</div>
-              <div>
-                <span className="font-black text-lg block tracking-tight text-emerald-400">فزاع ERP</span>
-                <span className="text-[10px] text-slate-400 font-medium block">للإدارة الاستثمارية والمحاسبة</span>
+    <ThemeProvider>
+      <Toaster position="top-left" reverseOrder={false} toastOptions={{ style: { fontFamily: 'Tajawal, sans-serif' } }} />
+      <div className={`min-h-screen flex font-sans select-none ${dark ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-gray-800'}`} dir="rtl">
+
+        {/* ⭐ القائمة الجانبية */}
+        <aside className={`fixed inset-y-0 right-0 z-40 flex flex-col border-l transition-all duration-300 backdrop-blur-md
+          ${dark ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-gray-200'}
+          ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+          ${sidebarMini ? 'w-20' : 'w-64'}`}>
+
+          {/* رأس ثابت */}
+          <div className="p-4 flex items-center justify-between shrink-0">
+            {!sidebarMini ? (
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-slate-950">ف</div>
+                <div>
+                  <span className="font-black text-lg block tracking-tight text-emerald-400">فزاع ERP</span>
+                  <span className="text-[10px] text-slate-400 block">للاستثمار والمحاسبة</span>
+                </div>
               </div>
-            </div>
-            {/* Close button on Mobile */}
-            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
+            ) : (
+              <div className="w-8 h-8 mx-auto rounded-lg bg-emerald-500 flex items-center justify-center font-black text-slate-950">ف</div>
+            )}
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 hover:bg-slate-800 rounded">
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* User Status Card */}
-          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold font-mono border border-slate-700">
-              {profile?.email?.substring(0, 2).toUpperCase() || 'SU'}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold truncate text-slate-200">{profile?.email || 'تحميل...'}</div>
-              <div className="text-[9px] font-semibold text-emerald-400 mt-0.5 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>دوره: {profile?.role === 'admin' ? 'مدير نظام' : profile?.role === 'accountant' ? 'محاسب مسؤول' : 'مراقب عام'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Navigation Links */}
-          <nav className="space-y-1">
+          {/* ⭐ عناصر القائمة قابلة للتمرير */}
+          <nav className="flex-1 overflow-y-auto px-2 space-y-1 scrollbar-thin">
             {menuItems.map((item) => {
-              const IconComp = item.icon
+              const Icon = item.icon
               const isActive = activeView === item.id
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveView(item.id as ActiveView); setSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                    isActive 
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/40 border border-transparent'
-                  }`}
+                  onClick={() => { setActiveView(item.id); setSidebarOpen(false) }}
+                  title={sidebarMini ? item.label : ''}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all
+                    ${isActive
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : dark
+                        ? 'text-slate-400 hover:text-white hover:bg-slate-800/40 border border-transparent'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'}
+                    ${sidebarMini ? 'justify-center' : ''}`}
                 >
-                  <IconComp className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-emerald-400' : ''}`} />
+                  {!sidebarMini && <span>{item.label}</span>}
                 </button>
               )
             })}
           </nav>
-        </div>
 
-        {/* Log Out Button */}
-        <button 
-          onClick={handleLogOut}
-          className="flex items-center gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors w-full"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <span>إنهاء الجلسة الآمنة</span>
-        </button>
-      </aside>
-
-      {/* Main Workspace Frame */}
-      <div className="flex-1 lg:mr-64 flex flex-col min-h-screen bg-slate-950">
-        {/* Top Header Rail */}
-        <header className="bg-slate-900/40 backdrop-blur-md border-b border-slate-800 h-16 px-6 flex items-center justify-between sticky top-0 z-30 no-print">
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 hover:bg-slate-800 text-slate-400 rounded-lg"
+          {/* أسفل ثابت */}
+          <div className={`p-3 border-t shrink-0 space-y-2 ${dark ? 'border-slate-800' : 'border-gray-200'}`}>
+            <button
+              onClick={() => setSidebarMini(!sidebarMini)}
+              className={`w-full flex items-center justify-center gap-2 text-xs py-2 rounded-lg transition ${dark ? 'text-slate-400 hover:text-white hover:bg-slate-800/40' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
             >
-              <Menu className="w-5 h-5" />
+              {sidebarMini ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+              {!sidebarMini && <span>تصغير القائمة</span>}
             </button>
-            <h2 className="text-white font-black text-sm tracking-tight flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              {menuItems.find(m => m.id === activeView)?.label || 'الرئيسية'}
-            </h2>
+            <button
+              onClick={handleLogOut}
+              className={`w-full flex items-center justify-center gap-2 text-rose-500 hover:bg-rose-50 px-3 py-2 rounded-xl text-xs font-bold transition ${sidebarMini ? 'justify-center' : ''}`}
+            >
+              <LogOut className="w-4 h-4" />
+              {!sidebarMini && <span>إنهاء الجلسة</span>}
+            </button>
           </div>
-          <div className="text-xs text-slate-400 font-medium hidden md:block">
-            آخر تحديث للأرصدة: <span className="font-mono text-emerald-400 font-bold">{new Date().toLocaleTimeString('ar-SA')}</span>
-          </div>
-        </header>
+        </aside>
 
-        {/* Dynamic Inner Panel View with padding */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto pb-24">
-          {renderActiveView()}
-        </main>
+        {/* ⭐ المحتوى الرئيسي */}
+        <div className={`flex-1 flex flex-col min-h-screen transition-all ${sidebarMini ? 'lg:mr-20' : 'lg:mr-64'}`}>
+          {/* الشريط العلوي */}
+          <header className={`h-16 px-6 flex items-center justify-between sticky top-0 z-30 border-b backdrop-blur-md
+            ${dark ? 'bg-slate-900/40 border-slate-800' : 'bg-white/70 border-gray-200'}`}>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-800 text-slate-400 rounded-lg">
+                <Menu className="w-5 h-5" />
+              </button>
+              <h2 className="font-black text-sm tracking-tight flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {menuItems.find(m => m.id === activeView)?.label || 'الرئيسية'}
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button className="relative p-2 hover:bg-slate-800 rounded-lg transition">
+                <Bell className={`w-5 h-5 ${dark ? 'text-slate-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'}`} />
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center text-white">3</span>
+              </button>
+              <button onClick={toggleTheme} className={`p-2 rounded-lg transition ${dark ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}>
+                {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
+          </header>
+
+          {/* محتوى الصفحة */}
+          <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto pb-24">
+            {renderActiveView()}
+          </main>
+        </div>
       </div>
-    </div>
+    </ThemeProvider>
   )
 }
