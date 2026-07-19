@@ -45,28 +45,50 @@ export default function AccountantDashboard() {
   const paidToday = payments.filter(p => p.status === 'paid' && p.payment_date === today)
 
   const sendWhatsApp = (phone: string, type: 'today' | 'tomorrow' | 'late' | 'thanks', name: string, amount: number, date: string) => {
-    const messages = {
-      tomorrow: `السلام عليكم أستاذ/ة ${name}، نود تذكيركم بأن موعد استحقاق دفعتكم القادمة سيكون بتاريخ ${date} بمبلغ ${amount} ريال. نأمل التكرم بسدادها في موعدها، ونشكركم على ثقتكم بنا.`,
-      today: `السلام عليكم أستاذ/ة ${name}، نفيدكم بأن دفعتكم المستحقة اليوم بتاريخ ${date} بقيمة ${amount} ريال أصبحت مستحقة. نرجو المبادرة بالسداد، وشكراً لكم.`,
-      late: `السلام عليكم أستاذ/ة ${name}، تشير سجلاتنا إلى وجود قسط مستحق لم يتم سداده حتى الآن، وقيمته ${amount} ريال، وكان تاريخ استحقاقه ${date}. نرجو سرعة السداد لتجنب أي إجراءات أو رسوم وفقاً للعقد. شكراً لتعاونكم.`,
-      thanks: `السلام عليكم أستاذ/ة ${name}، تم استلام دفعتكم بنجاح، ونشكركم على التزامكم بالسداد. نسعد بخدمتكم دائماً.`
-    }
-    
-    if(phone) {
-       window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(messages[type])}`, '_blank')
-    } else {
-       alert("لا يوجد رقم جوال مسجل لهذا العميل")
-    }
+  if (!phone) {
+    alert("لا يوجد رقم جوال مسجل لهذا العميل")
+    return
   }
 
-  if (loading) return <div className="p-8 text-center text-white font-bold text-xl" dir="rtl">جاري تجهيز بيانات المحاسب...</div>
+  // تنظيف وتنسيق الرقم
+  let cleanPhone = phone.replace(/[^0-9]/g, '')
+  
+  // تحويل الصيغة المحلية (05...) إلى الدولية (9665...)
+  if (cleanPhone.startsWith('05')) {
+    cleanPhone = '966' + cleanPhone.substring(1)
+  } else if (cleanPhone.startsWith('5') && cleanPhone.length === 9) {
+    cleanPhone = '966' + cleanPhone
+  }
 
-  return (
-    <div className="p-6 text-white" dir="rtl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black mb-2">لوحة متابعة المحاسب</h1>
-        <p className="text-slate-400">تابع الاستحقاقات والمتأخرات وتواصل مع العملاء بضغطة زر</p>
-      </div>
+  const messages = {
+    tomorrow: `السلام عليكم أستاذ/ة ${name}، نود تذكيركم بأن موعد استحقاق دفعتكم القادمة سيكون بتاريخ ${date} بمبلغ ${amount} ريال. نأمل التكرم بسدادها في موعدها، ونشكركم على ثقتكم بنا.`,
+    today: `السلام عليكم أستاذ/ة ${name}، نفيدكم بأن دفعتكم المستحقة اليوم بتاريخ ${date} بقيمة ${amount} ريال أصبحت مستحقة. نرجو المبادرة بالسداد، وشكراً لكم.`,
+    late: `السلام عليكم أستاذ/ة ${name}، تشير سجلاتنا إلى وجود قسط مستحق لم يتم سداده حتى الآن، وقيمته ${amount} ريال، وكان تاريخ استحقاقه ${date}. نرجو سرعة السداد لتجنب أي إجراءات أو رسوم وفقاً للعقد. شكراً لتعاونكم.`,
+    thanks: `السلام عليكم أستاذ/ة ${name}، تم استلام دفعتكم بنجاح، ونشكركم على التزامكم بالسداد. نسعد بخدمتكم دائماً.`
+  }
+  
+  const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messages[type])}`
+  const newWindow = window.open(url, '_blank')
+  
+  if (!newWindow) {
+    alert("يرجى السماح بفتح النوافذ المنبثقة لاستخدام خدمة الواتساب")
+  }
+}
+
+if (loading) return (
+  <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white font-bold text-xl" dir="rtl">
+    جاري تجهيز بيانات المحاسب...
+  </div>
+)
+
+return (
+  <div className="min-h-screen bg-slate-950 p-6 text-white" dir="rtl">
+    <div className="mb-8 border-b border-slate-800 pb-6">
+      <h1 className="text-3xl font-black mb-2 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">لوحة متابعة المحاسب</h1>
+      <p className="text-slate-400">تحكم كامل في الاستحقاقات وتواصل لحظي مع العملاء</p>
+    </div>
+    {/* باقي الكود يكمل هنا */}
+
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
