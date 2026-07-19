@@ -55,11 +55,11 @@ export default function CustomReports() {
   async function fetchInitialData() {
     setLoading(true)
     try {
-      // جلب العقود مع بيانات العملاء والأقساط
+      // جلب العقود من الـ view، ونستخدم start_date للترتيب بدلاً من created_at
       const { data: contracts, error } = await supabase
         .from('vw_contracts_report')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('start_date', { ascending: false })  // تم التعديل: استخدمنا start_date
       
       if (error) throw error
       
@@ -161,13 +161,13 @@ export default function CustomReports() {
       data = data.filter(r => r.start_date <= filters.date_to)
     }
     
-    // فرز
+    // فرز - باستخدام start_date بدلاً من created_at
     switch (sortBy) {
       case 'newest':
-        data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        data.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
         break
       case 'oldest':
-        data.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        data.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
         break
       case 'highest_value':
         data.sort((a, b) => Number(b.total_amount) - Number(a.total_amount))
