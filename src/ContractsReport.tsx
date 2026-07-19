@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle } from 'lucide-react'
+import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, CreditCard } from 'lucide-react'
 
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
@@ -8,6 +8,10 @@ export default function ContractsReport() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [contractToPrint, setContractToPrint] = useState<any>(null)
+  
+  const [viewClient, setViewClient] = useState<any>(null)
+  const [installments, setInstallments] = useState<any[]>([])
+  const [payData, setPayData] = useState({ id: '', method: 'cash', amount: '' })
 
   const [formData, setFormData] = useState({
     investor_id: '',
@@ -19,7 +23,9 @@ export default function ContractsReport() {
     total_amount: '',
     installment_amount: '',
     discount_amount: '0',
-    start_date: new Date().toISOString().split('T')[0]
+    start_date: new Date().toISOString().split('T')[0],
+    sale_type: 'deferred',
+    finance_company: ''
   })
 
   useEffect(() => {
@@ -34,21 +40,20 @@ export default function ContractsReport() {
     if (invData) setInvestors(invData)
   }
 
-  // دالة إرسال الواتساب المضافة حديثاً
-  const sendWhatsApp = (phone: string, type: 'reminder' | 'today' | 'late', name: string, amount: number, date: string) => {
+  const sendWhatsApp = (phone: string, type: 'reminder' | 'today' | 'late' | 'thanks', name: string, amount: string | number, date: string = '') => {
     const messages = {
       reminder: `السلام عليكم أستاذ/ة ${name}، نود تذكيركم بأن موعد استحقاق دفعتكم القادمة سيكون بتاريخ ${date} بمبلغ ${amount} ريال. نأمل التكرم بسدادها في موعدها، ونشكركم على ثقتكم بنا.`,
       today: `السلام عليكم أستاذ/ة ${name}، نفيدكم بأن دفعتكم المستحقة اليوم بتاريخ ${date} بقيمة ${amount} ريال أصبحت مستحقة. نرجو المبادرة بالسداد، وشكراً لكم.`,
-      late: `السلام عليكم أستاذ/ة ${name}، تشير سجلاتنا إلى وجود قسط مستحق لم يتم سداده حتى الآن، وقيمته ${amount} ريال، وكان تاريخ استحقاقه ${date}. نرجو سرعة السداد لتجنب أي إجراءات أو رسوم وفقاً للعقد. شكراً لتعاونكم.`
+      late: `السلام عليكم أستاذ/ة ${name}، تشير سجلاتنا إلى وجود قسط مستحق لم يتم سداده حتى الآن، وقيمته ${amount} ريال، وكان تاريخ استحقاقه ${date}. نرجو سرعة السداد لتجنب أي إجراءات أو رسوم وفقاً للعقد. شكراً لتعاونكم.`,
+      thanks: `السلام عليكم أستاذ/ة ${name}، تم استلام دفعتكم بنجاح، ونشكركم على التزامكم بالسداد. نسعد بخدمتكم دائماً.`
     };
     
-    // التحقق من وجود رقم جوال قبل فتح الرابط
     if(phone) {
        window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(messages[type])}`, '_blank');
     } else {
        alert("لا يوجد رقم جوال مسجل لهذا العميل");
     }
-  };
+  }
 
   async function handleAddContract(e: any) {
     e.preventDefault()
@@ -57,31 +62,19 @@ export default function ContractsReport() {
     try {
       let customerId = ''
       
-      const { data: existingCust } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('national_id', formData.national_id)
-        .single()
+      const { data: existingCust } = await supabase.from('customers').select('id').eq('national_id', formData.national_id).single()
 
       if (existingCust) {
         customerId = existingCust.id
       } else {
-        const { data: newCust, error: custErr } = await supabase
-          .from('customers')
-          .insert([{ 
-            name: formData.customer_name, 
-            national_id: formData.national_id, 
-            phone: formData.phone 
-          }])
-          .select('id')
-          .single()
-        
+        const { data: newCust, error: custErr } = await supabase.from('customers')
+          .insert([{ name: formData.customer_name, national_id: formData.national_id, phone: formData.phone }])
+          .select('id').single()
         if (custErr) throw custErr
         customerId = newCust.id
       }
 
-      const { data: newContract, error: contractErr } = await supabase
-        .from('installment_contracts')
+      const { data: newContract, error: contractErr } = await supabase.from('installment_contracts')
         .insert([{
           customer_id: customerId,
           investor_id: formData.investor_id,
@@ -90,10 +83,11 @@ export default function ContractsReport() {
           total_amount: formData.total_amount,
           installment_amount: formData.installment_amount,
           discount_amount: formData.discount_amount,
-          start_date: formData.start_date
+          start_date: formData.start_date,
+          sale_type: formData.sale_type,
+          finance_company: formData.sale_type === 'finance' ? formData.finance_company : null
         }])
-        .select()
-        .single()
+        .select().single()
 
       if (contractErr) throw contractErr
 
@@ -125,14 +119,44 @@ export default function ContractsReport() {
       setShowModal(false)
       fetchData()
       setFormData({
-        investor_id: '', customer_name: '', national_id: '', phone: '',
-        guarantor_name: '', guarantor_phone: '', total_amount: '',
-        installment_amount: '', discount_amount: '0', start_date: new Date().toISOString().split('T')[0]
+        investor_id: '', customer_name: '', national_id: '', phone: '', guarantor_name: '', guarantor_phone: '', 
+        total_amount: '', installment_amount: '', discount_amount: '0', start_date: new Date().toISOString().split('T')[0],
+        sale_type: 'deferred', finance_company: ''
       })
     } catch (err: any) {
       alert('صار خطأ تأكد من البيانات ' + err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function openClientFile(clientObj: any) {
+    setViewClient(clientObj)
+    const { data } = await supabase.from('contract_payments')
+      .select('*')
+      .eq('contract_id', clientObj.contract_id)
+      .order('due_date', { ascending: true })
+    if(data) setInstallments(data)
+  }
+
+  async function handlePaySubmit(e: any) {
+    e.preventDefault()
+    try {
+      const { error } = await supabase.from('contract_payments').update({
+        status: 'paid',
+        payment_method: payData.method,
+        amount_paid: payData.amount,
+        payment_date: new Date().toISOString().split('T')[0]
+      }).eq('id', payData.id)
+
+      if(error) throw error
+      
+      alert('تم تسجيل السداد بنجاح')
+      setPayData({ id: '', method: 'cash', amount: '' })
+      openClientFile(viewClient)
+      fetchData()
+    } catch(err: any) {
+      alert('فشل تسجيل السداد: ' + err.message)
     }
   }
 
@@ -158,7 +182,6 @@ export default function ContractsReport() {
             <div className="space-y-4">
               <p><span className="font-bold text-slate-500">الطرف الأول (المستثمر):</span> <span className="font-black">{contractToPrint.investor_name}</span></p>
               <p><span className="font-bold text-slate-500">الطرف الثاني (العميل):</span> <span className="font-black">{contractToPrint.customer_name}</span></p>
-              {/* تمت إضافة رقم الهوية هنا */}
               <p><span className="font-bold text-slate-500">رقم الهوية:</span> <span className="font-black">{contractToPrint.customer_id_num || 'غير مسجل'}</span></p>
               <p><span className="font-bold text-slate-500">الكفيل الغارم:</span> <span className="font-black">{contractToPrint.guarantor_name || 'لا يوجد'}</span></p>
             </div>
@@ -166,6 +189,7 @@ export default function ContractsReport() {
               <p><span className="font-bold text-slate-500">إجمالي قيمة العقد:</span> <span className="font-black">{contractToPrint.total_amount} ريال</span></p>
               <p><span className="font-bold text-slate-500">قيمة القسط الشهري:</span> <span className="font-black">{contractToPrint.installment_amount} ريال</span></p>
               <p><span className="font-bold text-slate-500">الرصيد المتبقي:</span> <span className="font-black">{contractToPrint.remaining_amount} ريال</span></p>
+              <p><span className="font-bold text-slate-500">نوع البيع:</span> <span className="font-black">{contractToPrint.sale_type === 'finance' ? `تمويل (${contractToPrint.finance_company})` : 'بيع آجل'}</span></p>
             </div>
           </div>
 
@@ -206,7 +230,6 @@ export default function ContractsReport() {
 
   const totalAmount = reports.reduce((sum, r: any) => sum + Number(r.total_amount), 0)
   const totalPaid = reports.reduce((sum, r: any) => sum + Number(r.total_paid), 0)
-  const totalDiscount = reports.reduce((sum, r: any) => sum + Number(r.discount_amount), 0)
   const totalRemaining = reports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
   const totalLate = reports.reduce((sum, r: any) => sum + Number(r.late_amount), 0)
 
@@ -214,86 +237,68 @@ export default function ContractsReport() {
     <div className="p-4 relative" dir="rtl">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-black text-white">إدارة تقارير العقود</h2>
-          <p className="text-slate-400 text-sm mt-1">تابع إجمالي العقود واربطها بالمستثمرين وأصدر السندات</p>
+          <h2 className="text-2xl font-black text-white">إدارة تقارير العقود وملفات العملاء</h2>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-all"
-        >
+        <button onClick={() => setShowModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-2">
           <Plus className="w-5 h-5" /> إنشاء عقد تقسيط جديد
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800 shadow-xl bg-slate-900/50">
-        <table className="w-full border-collapse text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
+        <table className="w-full text-sm text-center">
           <thead className="bg-slate-800 text-slate-300">
             <tr>
-              <th className="p-4 text-right">رقم العقد</th>
-              <th className="p-4 text-right">المستثمر الممول</th>
-              <th className="p-4 text-right">اسم العميل</th>
-              {/* تمت إضافة عمود الهوية هنا */}
-              <th className="p-4 text-right">رقم الهوية</th>
-              <th className="p-4 text-right">الكفيل</th>
-              <th className="p-4 text-right">إجمالي العقد</th>
-              <th className="p-4 text-right">المدفوع</th>
-              <th className="p-4 text-right">المتبقي</th>
-              <th className="p-4 text-right">المتأخر</th>
-              <th className="p-4 text-right">قيمة القسط</th>
-              <th className="p-4 text-center">إجراءات</th>
+              <th className="p-4">رقم العقد</th>
+              <th className="p-4">العميل</th>
+              <th className="p-4">الهوية</th>
+              <th className="p-4">الإجمالي</th>
+              <th className="p-4">المتبقي</th>
+              <th className="p-4">واتساب</th>
+              <th className="p-4">ملف العميل</th>
+              <th className="p-4">طباعة</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
             {reports.map((r: any, i) => (
-              <tr key={i} className="hover:bg-slate-800/50 transition-colors">
+              <tr key={i} className="hover:bg-slate-800/50">
                 <td className="p-4 font-mono text-emerald-400">{r.serial_number}</td>
-                <td className="p-4 font-bold text-slate-200">{r.investor_name || 'غير محدد'}</td>
                 <td className="p-4 font-bold text-slate-200">{r.customer_name}</td>
-                {/* عرض رقم الهوية من الداتا */}
-                <td className="p-4 font-mono text-slate-300">{r.customer_id_num || '-'}</td>
-                <td className="p-4 text-slate-400">{r.guarantor_name || '-'}</td>
+                <td className="p-4 text-slate-300 font-mono">{r.customer_id_num || '-'}</td>
                 <td className="p-4 font-bold text-blue-400">{r.total_amount}</td>
-                <td className="p-4 font-bold text-emerald-400">{r.total_paid}</td>
-                <td className="p-4 font-black text-rose-300">{r.remaining_amount}</td>
-                <td className="p-4 font-bold text-red-500">{r.late_amount}</td>
-                <td className="p-4 text-slate-300">{r.installment_amount}</td>
-                <td className="p-4 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    {/* أزرار الواتساب المضافة */}
-                    <button onClick={() => sendWhatsApp(r.customer_phone, 'reminder', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-blue-500/10 hover:bg-blue-500 hover:text-white text-blue-400 rounded-lg transition-colors" title="إرسال تذكير">
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => sendWhatsApp(r.customer_phone, 'today', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-yellow-500/10 hover:bg-yellow-500 hover:text-white text-yellow-400 rounded-lg transition-colors" title="استحقاق اليوم">
-                      <CheckCircle className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => sendWhatsApp(r.customer_phone, 'late', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 rounded-lg transition-colors" title="إشعار تأخير">
-                      <AlertCircle className="w-4 h-4" />
-                    </button>
-                    <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                    {/* زر الطباعة الأصلي */}
-                    <button onClick={() => setContractToPrint(r)} className="p-1.5 bg-slate-800 hover:bg-emerald-500 hover:text-slate-900 text-slate-400 rounded-lg transition-colors" title="طباعة العقد">
-                      <Printer className="w-4 h-4" />
-                    </button>
+                <td className="p-4 font-bold text-rose-300">{r.remaining_amount}</td>
+                <td className="p-4">
+                  <div className="flex items-center justify-center gap-1">
+                    <button onClick={() => sendWhatsApp(r.phone, 'reminder', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500 hover:text-white" title="تذكير"><MessageCircle size={16}/></button>
+                    <button onClick={() => sendWhatsApp(r.phone, 'today', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500 hover:text-white" title="اليوم"><CheckCircle size={16}/></button>
+                    <button onClick={() => sendWhatsApp(r.phone, 'late', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500 hover:text-white" title="تأخير"><AlertCircle size={16}/></button>
                   </div>
+                </td>
+                <td className="p-4">
+                  <button onClick={() => openClientFile(r)} className="p-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 rounded-lg flex items-center justify-center gap-1 mx-auto font-bold text-xs transition-colors">
+                    <Eye size={16} /> فتح السجل
+                  </button>
+                </td>
+                <td className="p-4">
+                  <button onClick={() => setContractToPrint(r)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                    <Printer size={16} />
+                  </button>
                 </td>
               </tr>
             ))}
             <tr className="bg-slate-950 font-black">
-              <td className="p-4 text-left" colSpan={5}>الإجمالي الكلي للسوق</td>
+              <td className="p-4 text-left" colSpan={3}>الإجمالي الكلي للسوق</td>
               <td className="p-4 text-blue-400">{totalAmount}</td>
-              <td className="p-4 text-emerald-400">{totalPaid}</td>
               <td className="p-4 text-rose-300">{totalRemaining}</td>
-              <td className="p-4 text-red-500">{totalLate}</td>
-              <td className="p-4" colSpan={2}></td>
+              <td className="p-4" colSpan={3}></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl">
-            <div className="flex justify-between items-center p-6 border-b border-slate-800">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center p-6 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
               <h3 className="text-xl font-black text-white flex items-center gap-2">
                 <FileText className="text-emerald-500 w-6 h-6" /> إصدار عقد تقسيط جديد
               </h3>
@@ -308,73 +313,172 @@ export default function ContractsReport() {
                 <div className="space-y-4">
                   <h4 className="font-bold text-emerald-400 border-b border-slate-800 pb-2">بيانات الارتباط</h4>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">المستثمر الممول للعملية *</label>
-                    <select required value={formData.investor_id} onChange={e => setFormData({...formData, investor_id: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none">
+                    <label className="block text-xs font-bold text-slate-400 mb-1">نوع عملية البيع *</label>
+                    <select required value={formData.sale_type} onChange={e => setFormData({...formData, sale_type: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none">
+                      <option value="deferred">بيع آجل (سند أمر)</option>
+                      <option value="finance">تطبيق تمويل</option>
+                    </select>
+                  </div>
+                  {formData.sale_type === 'finance' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1">جهة التمويل *</label>
+                      <select required value={formData.finance_company} onChange={e => setFormData({...formData, finance_company: e.target.value})} className="w-full bg-slate-950 border border-emerald-700 rounded-lg px-4 py-2.5 text-emerald-100 outline-none">
+                        <option value="">اختر شركة التمويل</option>
+                        <option value="إمكان">إمكان</option>
+                        <option value="تمارا">تمارا</option>
+                        <option value="تابي">تابي</option>
+                        <option value="مورا">مورا</option>
+                        <option value="كوارا">كوارا</option>
+                        <option value="تمام">تمام</option>
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1">المستثمر الممول *</label>
+                    <select required value={formData.investor_id} onChange={e => setFormData({...formData, investor_id: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none">
                       <option value="">اختر المستثمر من القائمة</option>
-                      {investors.map((inv: any) => (
-                        <option key={inv.id} value={inv.id}>{inv.name}</option>
-                      ))}
+                      {investors.map((inv: any) => <option key={inv.id} value={inv.id}>{inv.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">اسم العميل الثلاثي *</label>
-                    <input required type="text" value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none" placeholder="محمد صالح العتيبي" />
+                    <label className="block text-xs font-bold text-slate-400 mb-1">اسم العميل *</label>
+                    <input required value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">رقم الهوية *</label>
-                      <input required type="text" value={formData.national_id} onChange={e => setFormData({...formData, national_id: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono" placeholder="1000000000" />
+                      <input required value={formData.national_id} onChange={e => setFormData({...formData, national_id: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">رقم الجوال *</label>
-                      <input required type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono" placeholder="0500000000" />
+                      <input required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="font-bold text-blue-400 border-b border-slate-800 pb-2">بيانات العقد والكفيل</h4>
+                  <h4 className="font-bold text-blue-400 border-b border-slate-800 pb-2">بيانات العقد</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">اسم الكفيل الغارم</label>
-                      <input type="text" value={formData.guarantor_name} onChange={e => setFormData({...formData, guarantor_name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none" />
+                      <label className="block text-xs font-bold text-slate-400 mb-1">اسم الكفيل</label>
+                      <input value={formData.guarantor_name} onChange={e => setFormData({...formData, guarantor_name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">جوال الكفيل</label>
-                      <input type="text" value={formData.guarantor_phone} onChange={e => setFormData({...formData, guarantor_phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono" />
+                      <input value={formData.guarantor_phone} onChange={e => setFormData({...formData, guarantor_phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">إجمالي العقد *</label>
-                      <input required type="number" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono text-blue-400 font-bold" />
+                      <input required type="number" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono text-blue-400 font-bold" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">الخصم المقدم</label>
-                      <input type="number" value={formData.discount_amount} onChange={e => setFormData({...formData, discount_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono" />
+                      <label className="block text-xs font-bold text-slate-400 mb-1">خصم</label>
+                      <input type="number" value={formData.discount_amount} onChange={e => setFormData({...formData, discount_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1">القسط الشهري *</label>
-                      <input required type="number" value={formData.installment_amount} onChange={e => setFormData({...formData, installment_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono text-emerald-400 font-bold" />
+                      <label className="block text-xs font-bold text-slate-400 mb-1">القسط *</label>
+                      <input required type="number" value={formData.installment_amount} onChange={e => setFormData({...formData, installment_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono text-emerald-400 font-bold" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">تاريخ بداية أول قسط *</label>
-                    <input required type="date" value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:border-emerald-500 outline-none font-mono" />
+                    <label className="block text-xs font-bold text-slate-400 mb-1">تاريخ أول قسط *</label>
+                    <input required type="date" value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                   </div>
                 </div>
 
               </div>
               
               <div className="mt-8 flex gap-4 pt-6 border-t border-slate-800">
-                <button disabled={loading} type="submit" className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition-colors">
-                  {loading ? 'جاري تأسيس العقد والجدولة...' : 'اعتماد العقد وإصدار الدفعات'}
+                <button disabled={loading} type="submit" className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl">
+                  {loading ? 'جاري التنفيذ...' : 'اعتماد العقد'}
                 </button>
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors">
-                  إلغاء
-                </button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl">إلغاء</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewClient && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+            
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 rounded-t-2xl">
+              <div>
+                <h3 className="text-2xl font-black text-white">{viewClient.customer_name}</h3>
+                <div className="flex gap-4 mt-2 text-sm text-slate-400 font-bold">
+                  <span>العقد: <span className="text-emerald-400 font-mono">{viewClient.serial_number}</span></span>
+                  <span>المتبقي: <span className="text-rose-400">{viewClient.remaining_amount} ريال</span></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => sendWhatsApp(viewClient.phone, 'thanks', viewClient.customer_name, '')} className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2">
+                  <MessageCircle size={16}/> شكر بعد السداد
+                </button>
+                <button onClick={() => setViewClient(null)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-lg"><X size={20}/></button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              <table className="w-full text-sm text-center">
+                <thead className="bg-slate-800 text-slate-300">
+                  <tr>
+                    <th className="p-3">رقم القسط</th>
+                    <th className="p-3">الاستحقاق</th>
+                    <th className="p-3">المبلغ</th>
+                    <th className="p-3">الحالة</th>
+                    <th className="p-3">طريقة الدفع</th>
+                    <th className="p-3">الإجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {installments.map((inst, idx) => {
+                    const isPaid = inst.status === 'paid'
+                    const todayDate = new Date().toISOString().split('T')[0]
+                    const isLate = !isPaid && inst.due_date < todayDate
+                    const isToday = !isPaid && inst.due_date === todayDate
+                    
+                    return (
+                      <tr key={inst.id} className="hover:bg-slate-800/30">
+                        <td className="p-3 font-mono">{idx + 1}</td>
+                        <td className="p-3 font-mono text-slate-300">{inst.due_date}</td>
+                        <td className="p-3 font-bold text-blue-400">{inst.amount_due}</td>
+                        <td className="p-3">
+                          {isPaid ? <span className="text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded text-xs font-bold">مسدد</span> : 
+                           isLate ? <span className="text-rose-400 bg-rose-400/10 px-2 py-1 rounded text-xs font-bold">متأخر</span> :
+                           isToday ? <span className="text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded text-xs font-bold">مستحق اليوم</span> :
+                           <span className="text-slate-400">غير مستحق</span>}
+                        </td>
+                        <td className="p-3 text-xs text-slate-400">{inst.payment_method === 'cash' ? 'كاش' : inst.payment_method === 'transfer' ? 'تحويل' : '-'}</td>
+                        <td className="p-3">
+                          {!isPaid ? (
+                            payData.id === inst.id ? (
+                              <form onSubmit={handlePaySubmit} className="flex flex-col gap-2 items-center bg-slate-800 p-2 rounded-lg border border-slate-600">
+                                <input required type="number" placeholder="المبلغ" value={payData.amount} onChange={e=>setPayData({...payData, amount: e.target.value})} className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                <select value={payData.method} onChange={e=>setPayData({...payData, method: e.target.value})} className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none">
+                                  <option value="cash">كاش</option>
+                                  <option value="transfer">تحويل</option>
+                                </select>
+                                <div className="flex gap-1 w-full">
+                                  <button type="submit" className="flex-1 bg-emerald-500 text-slate-900 text-xs font-bold py-1 rounded">تأكيد</button>
+                                  <button type="button" onClick={()=>setPayData({id:'', method:'cash', amount:''})} className="flex-1 bg-slate-700 text-white text-xs py-1 rounded">إلغاء</button>
+                                </div>
+                              </form>
+                            ) : (
+                              <button onClick={() => setPayData({id: inst.id, method: 'cash', amount: inst.amount_due})} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 mx-auto">
+                                <Wallet size={14}/> تسجيل سداد
+                              </button>
+                            )
+                          ) : <span className="text-emerald-500 text-xs font-bold flex items-center justify-center gap-1"><CheckCircle size={14}/> مكتمل</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
