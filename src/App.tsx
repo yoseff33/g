@@ -5,7 +5,7 @@ import {
   BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck
 } from 'lucide-react';
 
-// Import All 11 Modules
+// Import All 12 Modules
 import DashboardView from './components/DashboardView';
 import InvestorsView from './components/InvestorsView';
 import ContractsView from './components/ContractsView';
@@ -17,10 +17,11 @@ import FinancialReportsView from './components/FinancialReportsView';
 import AuditLogsView from './components/AuditLogsView';
 import SettingsView from './components/SettingsView';
 import UsersView from './components/UsersView';
+import ContractsReport from './ContractsReport';
 import { Profile } from './types';
 
 type ActiveView = 
-  | 'dashboard' | 'investors' | 'contracts' | 'chart_of_accounts' 
+  | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts' 
   | 'journal_entries' | 'vouchers' | 'distributions' | 'reports' 
   | 'audit_logs' | 'settings' | 'users';
 
@@ -132,6 +133,8 @@ export default function App() {
         return <InvestorsView />;
       case 'contracts':
         return <ContractsView />;
+      case 'contracts_report':
+        return <ContractsReport />;
       case 'chart_of_accounts':
         return <ChartOfAccountsView />;
       case 'journal_entries':
@@ -158,6 +161,7 @@ export default function App() {
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
     { id: 'investors', label: 'شؤون المستثمرين', icon: Users },
     { id: 'contracts', label: 'العقود الاستثمارية', icon: FileText },
+    { id: 'contracts_report', label: 'تقرير عقود التقسيط', icon: FileText },
     { id: 'chart_of_accounts', label: 'شجرة الحسابات', icon: FolderTree },
     { id: 'journal_entries', label: 'قيود اليومية العامة', icon: Receipt },
     { id: 'vouchers', label: 'الخزينة والسندات', icon: DollarSign },
