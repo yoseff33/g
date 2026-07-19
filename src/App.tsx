@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { 
   LayoutDashboard, Users, FileText, FolderTree, Receipt, DollarSign, Percent, 
-  BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck
+  BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck, Filter
 } from 'lucide-react'
 
 // Import All 12 Modules
@@ -19,12 +19,13 @@ import SettingsView from './components/SettingsView'
 import UsersView from './components/UsersView'
 import ContractsReport from './ContractsReport'
 import AccountantDashboard from './AccountantDashboard'
+import CustomReports from './CustomReports'
 import { Profile } from './types'
 
 type ActiveView = 
   | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts' 
   | 'journal_entries' | 'vouchers' | 'distributions' | 'reports' 
-  | 'audit_logs' | 'settings' | 'users' | 'accountant_dashboard'
+  | 'audit_logs' | 'settings' | 'users' | 'accountant_dashboard' | 'custom_reports'
 
 export default function App() {
   const [session, setSession] = useState<any>(null)
@@ -132,6 +133,8 @@ export default function App() {
         return <DashboardView />
       case 'accountant_dashboard':
         return <AccountantDashboard />
+      case 'custom_reports':
+        return <CustomReports />
       case 'investors':
         return <InvestorsView />
       case 'contracts':
@@ -163,6 +166,7 @@ export default function App() {
   const menuItems = [
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
     { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3 },
+    { id: 'custom_reports', label: 'التقارير المخصصة', icon: Filter },
     { id: 'investors', label: 'شؤون المستثمرين', icon: Users },
     { id: 'contracts', label: 'العقود الاستثمارية', icon: FileText },
     { id: 'contracts_report', label: 'تقرير عقود التقسيط', icon: FileText },
@@ -260,9 +264,7 @@ export default function App() {
 
           <div className="text-center">
             <button 
-              onClick={() => { setIsSignUp(!isSignUp)
- setAuthError('')
- setAuthSuccess('') }}
+              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); setAuthSuccess(''); }}
               className="text-slate-400 hover:text-white text-xs font-semibold underline"
             >
               {isSignUp ? 'هل تملك حساباً بالفعل؟ سجل دخولك هنا' : 'هل أنت محاسب جديد؟ أنشئ حساباً هاهنا'}
@@ -319,8 +321,7 @@ export default function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveView(item.id as ActiveView)
- setSidebarOpen(false) }}
+                  onClick={() => { setActiveView(item.id as ActiveView); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                     isActive 
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black' 
