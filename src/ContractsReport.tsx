@@ -13,7 +13,6 @@ export default function ContractsReport() {
   const [installments, setInstallments] = useState<any[]>([])
   const [payData, setPayData] = useState({ id: '', method: 'cash', amount: '' })
   
-  // حقل البحث والتصفية
   const [searchTerm, setSearchTerm] = useState('')
 
   const [formData, setFormData] = useState({
@@ -22,7 +21,7 @@ export default function ContractsReport() {
     national_id: '',
     phone: '',
     guarantor_name: '',
-    guarantor_id_number: '', // تم إضافة هوية الكفيل هنا
+    guarantor_id_number: '', 
     guarantor_phone: '',
     total_amount: '',
     installment_amount: '',
@@ -83,7 +82,7 @@ export default function ContractsReport() {
           customer_id: customerId,
           investor_id: formData.investor_id,
           guarantor_name: formData.guarantor_name,
-          guarantor_id_number: formData.guarantor_id_number, // تم التمرير هنا
+          guarantor_id_number: formData.guarantor_id_number, 
           guarantor_phone: formData.guarantor_phone,
           total_amount: formData.total_amount,
           installment_amount: formData.installment_amount,
@@ -165,14 +164,12 @@ export default function ContractsReport() {
     }
   }
 
-  // تصفية البيانات بناءً على شريط البحث
   const filteredReports = reports.filter((r: any) => 
     r.investor_name?.includes(searchTerm) || 
     r.customer_name?.includes(searchTerm) || 
     r.serial_number?.toString().includes(searchTerm)
   )
 
-  // دالة استخراج التقرير للإكسل
   const exportToExcel = () => {
     let csvContent = "\uFEFF"; 
     csvContent += "رقم العقد,المستثمر,العميل,هوية العميل,الكفيل,هوية الكفيل,إجمالي العقد,المدفوع,المتبقي,المتأخر,نوع البيع\n";
@@ -285,8 +282,22 @@ export default function ContractsReport() {
   const totalRemaining = filteredReports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
 
   return (
-    <div className="p-4 relative" dir="rtl">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 relative print-container" dir="rtl">
+      
+      <style>{`
+        @media print {
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          .print-container { padding: 0 !important; margin: 0 !important; }
+          table { width: 100% !important; border-collapse: collapse !important; margin-top: 20px; }
+          th, td { border: 1px solid #000 !important; padding: 8px !important; color: black !important; background: white !important; text-align: right; }
+          #fazza_workspace aside, #fazza_workspace header { display: none !important; }
+          #fazza_workspace { margin: 0 !important; padding: 0 !important; width: 100% !important; background: white !important;}
+          .hide-in-print { display: none !important; }
+        }
+      `}</style>
+
+      <div className="flex justify-between items-center mb-6 no-print">
         <div>
           <h2 className="text-2xl font-black text-white">إدارة تقارير العقود وملفات العملاء</h2>
         </div>
@@ -301,8 +312,11 @@ export default function ContractsReport() {
             />
             <Search className="absolute left-3 top-2.5 text-slate-500 w-5 h-5" />
           </div>
+          <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2">
+            <Printer className="w-5 h-5" /> طباعة / PDF
+          </button>
           <button onClick={exportToExcel} className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2">
-            <Download className="w-5 h-5" /> تصدير التقرير
+            <Download className="w-5 h-5" /> تصدير إكسل
           </button>
           <button onClick={() => setShowModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-2">
             <Plus className="w-5 h-5" /> عقد جديد
@@ -310,9 +324,13 @@ export default function ContractsReport() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
+      <div className="hidden no-print" style={{display: 'none'}} className="print:block print:mb-6 print:text-center font-bold text-2xl border-b-2 border-black pb-4">
+        كشف تقارير العقود وملفات العملاء
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50 print:border-none print:bg-transparent">
         <table className="w-full text-sm text-center">
-          <thead className="bg-slate-800 text-slate-300">
+          <thead className="bg-slate-800 text-slate-300 print:bg-transparent print:text-black">
             <tr>
               <th className="p-4">رقم العقد</th>
               <th className="p-4">المستثمر</th>
@@ -320,33 +338,33 @@ export default function ContractsReport() {
               <th className="p-4">الهوية</th>
               <th className="p-4">الإجمالي</th>
               <th className="p-4">المتبقي</th>
-              <th className="p-4">واتساب</th>
-              <th className="p-4">ملف العميل</th>
-              <th className="p-4">طباعة</th>
+              <th className="p-4 hide-in-print">واتساب</th>
+              <th className="p-4 hide-in-print">ملف العميل</th>
+              <th className="p-4 hide-in-print">طباعة</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-slate-800 print:divide-black">
             {filteredReports.map((r: any, i) => (
-              <tr key={i} className="hover:bg-slate-800/50">
-                <td className="p-4 font-mono text-emerald-400">{r.serial_number}</td>
-                <td className="p-4 font-bold text-slate-400">{r.investor_name || '-'}</td>
-                <td className="p-4 font-bold text-slate-200">{r.customer_name}</td>
-                <td className="p-4 text-slate-300 font-mono">{r.customer_id_num || '-'}</td>
-                <td className="p-4 font-bold text-blue-400">{r.total_amount}</td>
-                <td className="p-4 font-bold text-rose-300">{r.remaining_amount}</td>
-                <td className="p-4">
+              <tr key={i} className="hover:bg-slate-800/50 print:hover:bg-transparent">
+                <td className="p-4 font-mono text-emerald-400 print:text-black">{r.serial_number}</td>
+                <td className="p-4 font-bold text-slate-400 print:text-black">{r.investor_name || '-'}</td>
+                <td className="p-4 font-bold text-slate-200 print:text-black">{r.customer_name}</td>
+                <td className="p-4 text-slate-300 font-mono print:text-black">{r.customer_id_num || '-'}</td>
+                <td className="p-4 font-bold text-blue-400 print:text-black">{r.total_amount}</td>
+                <td className="p-4 font-bold text-rose-300 print:text-black">{r.remaining_amount}</td>
+                <td className="p-4 hide-in-print">
                   <div className="flex items-center justify-center gap-1">
                     <button onClick={() => sendWhatsApp(r.phone, 'reminder', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500 hover:text-white" title="تذكير"><MessageCircle size={16}/></button>
                     <button onClick={() => sendWhatsApp(r.phone, 'today', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500 hover:text-white" title="اليوم"><CheckCircle size={16}/></button>
                     <button onClick={() => sendWhatsApp(r.phone, 'late', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500 hover:text-white" title="تأخير"><AlertCircle size={16}/></button>
                   </div>
                 </td>
-                <td className="p-4">
+                <td className="p-4 hide-in-print">
                   <button onClick={() => openClientFile(r)} className="p-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 rounded-lg flex items-center justify-center gap-1 mx-auto font-bold text-xs transition-colors">
                     <Eye size={16} /> فتح السجل
                   </button>
                 </td>
-                <td className="p-4">
+                <td className="p-4 hide-in-print">
                   <button onClick={() => setContractToPrint(r)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
                     <Printer size={16} />
                   </button>
@@ -355,21 +373,21 @@ export default function ContractsReport() {
             ))}
             {filteredReports.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-8 text-slate-500 font-bold">لا يوجد نتائج تطابق بحثك</td>
+                <td colSpan={9} className="p-8 text-slate-500 font-bold print:text-black">لا يوجد نتائج تطابق بحثك</td>
               </tr>
             )}
-            <tr className="bg-slate-950 font-black">
-              <td className="p-4 text-left" colSpan={4}>إجمالي النتائج المعروضة</td>
-              <td className="p-4 text-blue-400">{totalAmount}</td>
-              <td className="p-4 text-rose-300">{totalRemaining}</td>
-              <td className="p-4" colSpan={3}></td>
+            <tr className="bg-slate-950 font-black print:bg-transparent print:text-black">
+              <td className="p-4 text-left print:text-right" colSpan={4}>إجمالي النتائج المعروضة</td>
+              <td className="p-4 text-blue-400 print:text-black">{totalAmount}</td>
+              <td className="p-4 text-rose-300 print:text-black">{totalRemaining}</td>
+              <td className="p-4 hide-in-print" colSpan={3}></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex justify-between items-center p-6 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
               <h3 className="text-xl font-black text-white flex items-center gap-2">
@@ -479,7 +497,7 @@ export default function ContractsReport() {
       )}
 
       {viewClient && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
             
             <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 rounded-t-2xl">
