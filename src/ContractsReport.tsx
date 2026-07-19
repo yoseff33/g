@@ -164,6 +164,41 @@ export default function ContractsReport() {
     }
   }
 
+  // دالة لحساب حالة العميل وأقرب قسط
+  function getClientStatus(contractId: number) {
+    // نبحث عن الأقساط الخاصة بهذا العقد (سنقوم بجلبها مسبقاً أو هنا)
+    // لكننا سنقوم بجلبها من التقرير نفسه، لكن التقرير لا يحتوي على تفاصيل الأقساط.
+    // لذلك سنقوم بجلب الأقساط لكل عقد عند التحميل (يمكن تحسين الأداء لاحقاً).
+    // لكننا سنقوم بجلبها في useEffect منفصل أو نخزنها في state.
+    // سنقوم بجلب جميع الأقساط مرة واحدة ثم نفلتر.
+  }
+
+  // سنضيف حالة للأقساط لكل عقد
+  const [contractPayments, setContractPayments] = useState<{ [key: number]: any[] }>({})
+
+  useEffect(() => {
+    // بعد جلب العقود، نجلب الأقساط لكل عقد
+    async function fetchAllPayments() {
+      if (reports.length === 0) return
+      const contractIds = reports.map((r: any) => r.contract_id)
+      const { data } = await supabase
+        .from('contract_payments')
+        .select('*')
+        .in('contract_id', contractIds)
+        .order('due_date', { ascending: true })
+      
+      if (data) {
+        const map: { [key: number]: any[] } = {}
+        data.forEach((p: any) => {
+          if (!map[p.contract_id]) map[p.contract_id] = []
+          map[p.contract_id].push(p)
+        })
+        setContractPayments(map)
+      }
+    }
+    fetchAllPayments()
+  }, [reports])
+
   const filteredReports = reports.filter((r: any) => 
     r.investor_name?.includes(searchTerm) || 
     r.customer_name?.includes(searchTerm) || 
@@ -199,6 +234,47 @@ export default function ContractsReport() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // دالة لحساب حالة العميل بناءً على الأقساط
+  function getClientStatusDisplay(contractId: number) {
+    const payments = contractPayments[contractId] || []
+    if (payments.length === 0) return { status: 'غير متاح', color: 'text-slate-400 bg-slate-800 border-slate-700', days: '-' }
+
+    const unpaid = payments.filter(p => p.status !== 'paid')
+    if (unpaid.length === 0) {
+      return { status: 'مكتمل السداد', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20', days: 'تم السداد' }
+    }
+
+    const next = unpaid[0]
+    const dueDate = new Date(next.due_date)
+    const today = new Date()
+    today.setHours(0,0,0,0)
+    const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    let statusText = ''
+    let colorClass = ''
+    let daysText = ''
+
+    if (diffDays < 0) {
+      statusText = 'متأخر'
+      colorClass = 'text-red-400 bg-red-400/10 border-red-400/20'
+      daysText = `متأخر ${Math.abs(diffDays)} يوم`
+    } else if (diffDays === 0) {
+      statusText = 'مستحق اليوم'
+      colorClass = 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+      daysText = 'اليوم'
+    } else if (diffDays === 1) {
+      statusText = 'مستحق غداً'
+      colorClass = 'text-orange-400 bg-orange-400/10 border-orange-400/20'
+      daysText = 'غداً'
+    } else {
+      statusText = 'غير مستحق'
+      colorClass = 'text-blue-400 bg-blue-400/10 border-blue-400/20'
+      daysText = `${diffDays} يوم`
+    }
+
+    return { status: statusText, color: colorClass, days: daysText, dueDate: next.due_date }
   }
 
   if (contractToPrint) {
@@ -281,46 +357,6 @@ export default function ContractsReport() {
   const totalPaid = filteredReports.reduce((sum, r: any) => sum + Number(r.total_paid), 0)
   const totalRemaining = filteredReports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
 
-  // حسابات نافذة العميل (عداد الأيام)
-  let nextInstallment = null;
-  let firstInstallmentDate = '-';
-  let clientStatus = 'مكتمل السداد';
-  let daysLeftText = '-';
-  let statusColor = 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
-
-  if (viewClient && installments.length > 0) {
-    firstInstallmentDate = installments[0].due_date;
-    const unpaid = installments.filter(i => i.status !== 'paid');
-    
-    if (unpaid.length > 0) {
-      nextInstallment = unpaid[0];
-      const todayStr = new Date().toISOString().split('T')[0];
-      const dueTime = new Date(nextInstallment.due_date).getTime();
-      const todayTime = new Date(todayStr).getTime();
-      const diffDays = Math.ceil((dueTime - todayTime) / (1000 * 60 * 60 * 24));
-
-      if (diffDays < 0) {
-        clientStatus = 'متأخر';
-        statusColor = 'text-red-400 bg-red-400/10 border-red-400/20';
-        daysLeftText = `متأخر منذ ${Math.abs(diffDays)} يوم`;
-      } else if (diffDays === 0) {
-        clientStatus = 'مستحق اليوم';
-        statusColor = 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20';
-        daysLeftText = 'الاستحقاق اليوم';
-      } else if (diffDays === 1) {
-        clientStatus = 'مستحق غداً';
-        statusColor = 'text-blue-400 bg-blue-400/10 border-blue-400/20';
-        daysLeftText = 'باقي يوم واحد';
-      } else {
-        clientStatus = 'غير مستحق';
-        statusColor = 'text-slate-300 bg-slate-800 border-slate-700';
-        daysLeftText = `باقي ${diffDays} يوم`;
-      }
-    } else {
-      daysLeftText = 'تم سداد العقد بالكامل';
-    }
-  }
-
   return (
     <div className="p-4 relative print-container" dir="rtl">
       
@@ -378,49 +414,62 @@ export default function ContractsReport() {
               <th className="p-4">الهوية</th>
               <th className="p-4">الإجمالي</th>
               <th className="p-4">المتبقي</th>
+              {/* الأعمدة الجديدة */}
+              <th className="p-4">تاريخ الاستحقاق القادم</th>
+              <th className="p-4">الأيام المتبقية</th>
+              <th className="p-4">الحالة</th>
               <th className="p-4 hide-in-print">واتساب</th>
               <th className="p-4 hide-in-print">ملف العميل</th>
               <th className="p-4 hide-in-print">طباعة</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 print:divide-black">
-            {filteredReports.map((r: any, i) => (
-              <tr key={i} className="hover:bg-slate-800/50 print:hover:bg-transparent">
-                <td className="p-4 font-mono text-emerald-400 print:text-black">{r.serial_number}</td>
-                <td className="p-4 font-bold text-slate-400 print:text-black">{r.investor_name || '-'}</td>
-                <td className="p-4 font-bold text-slate-200 print:text-black">{r.customer_name}</td>
-                <td className="p-4 text-slate-300 font-mono print:text-black">{r.customer_id_num || '-'}</td>
-                <td className="p-4 font-bold text-blue-400 print:text-black">{r.total_amount}</td>
-                <td className="p-4 font-bold text-rose-300 print:text-black">{r.remaining_amount}</td>
-                <td className="p-4 hide-in-print">
-                  <div className="flex items-center justify-center gap-1">
-                    <button onClick={() => sendWhatsApp(r.phone, 'reminder', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500 hover:text-white" title="تذكير"><MessageCircle size={16}/></button>
-                    <button onClick={() => sendWhatsApp(r.phone, 'today', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500 hover:text-white" title="اليوم"><CheckCircle size={16}/></button>
-                    <button onClick={() => sendWhatsApp(r.phone, 'late', r.customer_name, r.installment_amount, r.last_payment_date)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500 hover:text-white" title="تأخير"><AlertCircle size={16}/></button>
-                  </div>
-                </td>
-                <td className="p-4 hide-in-print">
-                  <button onClick={() => openClientFile(r)} className="p-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 rounded-lg flex items-center justify-center gap-1 mx-auto font-bold text-xs transition-colors">
-                    <Eye size={16} /> فتح السجل
-                  </button>
-                </td>
-                <td className="p-4 hide-in-print">
-                  <button onClick={() => setContractToPrint(r)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
-                    <Printer size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filteredReports.map((r: any, i) => {
+              const statusInfo = getClientStatusDisplay(r.contract_id)
+              return (
+                <tr key={i} className="hover:bg-slate-800/50 print:hover:bg-transparent">
+                  <td className="p-4 font-mono text-emerald-400 print:text-black">{r.serial_number}</td>
+                  <td className="p-4 font-bold text-slate-400 print:text-black">{r.investor_name || '-'}</td>
+                  <td className="p-4 font-bold text-slate-200 print:text-black">{r.customer_name}</td>
+                  <td className="p-4 text-slate-300 font-mono print:text-black">{r.customer_id_num || '-'}</td>
+                  <td className="p-4 font-bold text-blue-400 print:text-black">{r.total_amount}</td>
+                  <td className="p-4 font-bold text-rose-300 print:text-black">{r.remaining_amount}</td>
+                  <td className="p-4 font-mono text-slate-300 print:text-black">{statusInfo.dueDate || '-'}</td>
+                  <td className="p-4 font-bold text-slate-200 print:text-black">{statusInfo.days}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusInfo.color}`}>
+                      {statusInfo.status}
+                    </span>
+                  </td>
+                  <td className="p-4 hide-in-print">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => sendWhatsApp(r.phone, 'reminder', r.customer_name, r.installment_amount, statusInfo.dueDate)} className="p-1.5 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500 hover:text-white" title="تذكير"><MessageCircle size={16}/></button>
+                      <button onClick={() => sendWhatsApp(r.phone, 'today', r.customer_name, r.installment_amount, statusInfo.dueDate)} className="p-1.5 bg-yellow-500/10 text-yellow-400 rounded hover:bg-yellow-500 hover:text-white" title="اليوم"><CheckCircle size={16}/></button>
+                      <button onClick={() => sendWhatsApp(r.phone, 'late', r.customer_name, r.installment_amount, statusInfo.dueDate)} className="p-1.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500 hover:text-white" title="تأخير"><AlertCircle size={16}/></button>
+                    </div>
+                  </td>
+                  <td className="p-4 hide-in-print">
+                    <button onClick={() => openClientFile(r)} className="p-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 rounded-lg flex items-center justify-center gap-1 mx-auto font-bold text-xs transition-colors">
+                      <Eye size={16} /> فتح السجل
+                    </button>
+                  </td>
+                  <td className="p-4 hide-in-print">
+                    <button onClick={() => setContractToPrint(r)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                      <Printer size={16} />
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
             {filteredReports.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-8 text-slate-500 font-bold print:text-black">لا يوجد نتائج تطابق بحثك</td>
+                <td colSpan={12} className="p-8 text-slate-500 font-bold print:text-black">لا يوجد نتائج تطابق بحثك</td>
               </tr>
             )}
             <tr className="bg-slate-950 font-black print:bg-transparent print:text-black">
-              <td className="p-4 text-left print:text-right" colSpan={4}>إجمالي النتائج المعروضة</td>
-              <td className="p-4 text-blue-400 print:text-black">{totalAmount}</td>
+              <td className="p-4 text-left print:text-right" colSpan={5}>إجمالي النتائج المعروضة</td>
               <td className="p-4 text-rose-300 print:text-black">{totalRemaining}</td>
-              <td className="p-4 hide-in-print" colSpan={3}></td>
+              <td className="p-4 hide-in-print" colSpan={6}></td>
             </tr>
           </tbody>
         </table>
@@ -556,23 +605,69 @@ export default function ContractsReport() {
               </div>
             </div>
 
-            {/* لوحة العدادات الجديدة */}
             <div className="bg-slate-950 border-b border-slate-800 p-4 flex gap-4">
               <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
                 <span className="text-slate-500 text-xs font-bold mb-1">تاريخ أول قسط</span>
-                <span className="text-white font-mono">{firstInstallmentDate}</span>
+                <span className="text-white font-mono">{installments.length > 0 ? installments[0].due_date : '-'}</span>
               </div>
               <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
                 <span className="text-slate-500 text-xs font-bold mb-1">تاريخ القسط القادم</span>
-                <span className="text-white font-mono">{nextInstallment ? nextInstallment.due_date : '-'}</span>
+                <span className="text-white font-mono">
+                  {(() => {
+                    const unpaid = installments.filter(i => i.status !== 'paid')
+                    return unpaid.length > 0 ? unpaid[0].due_date : '-'
+                  })()}
+                </span>
               </div>
               <div className="flex-1 bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col items-center justify-center text-center">
                 <span className="text-slate-500 text-xs font-bold mb-1">عداد الأيام</span>
-                <span className="text-white font-bold">{daysLeftText}</span>
+                <span className="text-white font-bold">
+                  {(() => {
+                    const unpaid = installments.filter(i => i.status !== 'paid')
+                    if (unpaid.length === 0) return 'تم السداد'
+                    const next = unpaid[0]
+                    const due = new Date(next.due_date)
+                    const today = new Date()
+                    today.setHours(0,0,0,0)
+                    const diff = Math.ceil((due.getTime() - today.getTime()) / (1000*60*60*24))
+                    if (diff < 0) return `متأخر ${Math.abs(diff)} يوم`
+                    if (diff === 0) return 'اليوم'
+                    if (diff === 1) return 'غداً'
+                    return `${diff} يوم`
+                  })()}
+                </span>
               </div>
-              <div className={`flex-1 border p-4 rounded-xl flex flex-col items-center justify-center text-center ${statusColor}`}>
+              <div className={`flex-1 border p-4 rounded-xl flex flex-col items-center justify-center text-center ${
+                (() => {
+                  const unpaid = installments.filter(i => i.status !== 'paid')
+                  if (unpaid.length === 0) return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+                  const next = unpaid[0]
+                  const due = new Date(next.due_date)
+                  const today = new Date()
+                  today.setHours(0,0,0,0)
+                  const diff = Math.ceil((due.getTime() - today.getTime()) / (1000*60*60*24))
+                  if (diff < 0) return 'text-red-400 bg-red-400/10 border-red-400/20'
+                  if (diff === 0) return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+                  if (diff === 1) return 'text-orange-400 bg-orange-400/10 border-orange-400/20'
+                  return 'text-blue-400 bg-blue-400/10 border-blue-400/20'
+                })()
+              }`}>
                 <span className="text-inherit opacity-80 text-xs font-bold mb-1">حالة العميل</span>
-                <span className="font-black text-lg">{clientStatus}</span>
+                <span className="font-black text-lg">
+                  {(() => {
+                    const unpaid = installments.filter(i => i.status !== 'paid')
+                    if (unpaid.length === 0) return 'مكتمل السداد'
+                    const next = unpaid[0]
+                    const due = new Date(next.due_date)
+                    const today = new Date()
+                    today.setHours(0,0,0,0)
+                    const diff = Math.ceil((due.getTime() - today.getTime()) / (1000*60*60*24))
+                    if (diff < 0) return 'متأخر'
+                    if (diff === 0) return 'مستحق اليوم'
+                    if (diff === 1) return 'مستحق غداً'
+                    return 'غير مستحق'
+                  })()}
+                </span>
               </div>
             </div>
 
