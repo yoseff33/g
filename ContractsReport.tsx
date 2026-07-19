@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './supabaseClient' // تأكد من مسار سوبابيس عندك
-
+import { supabase } from '../lib/supabase'
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
 
