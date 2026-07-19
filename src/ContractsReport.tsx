@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, CreditCard } from 'lucide-react'
+import { Plus, Printer, X, FileText, MessageCircle, AlertCircle, CheckCircle, Eye, Wallet, Download, Search } from 'lucide-react'
 
 export default function ContractsReport() {
   const [reports, setReports] = useState([])
@@ -12,6 +12,9 @@ export default function ContractsReport() {
   const [viewClient, setViewClient] = useState<any>(null)
   const [installments, setInstallments] = useState<any[]>([])
   const [payData, setPayData] = useState({ id: '', method: 'cash', amount: '' })
+  
+  // حقل البحث والتصفية
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [formData, setFormData] = useState({
     investor_id: '',
@@ -19,6 +22,7 @@ export default function ContractsReport() {
     national_id: '',
     phone: '',
     guarantor_name: '',
+    guarantor_id_number: '', // تم إضافة هوية الكفيل هنا
     guarantor_phone: '',
     total_amount: '',
     installment_amount: '',
@@ -79,6 +83,7 @@ export default function ContractsReport() {
           customer_id: customerId,
           investor_id: formData.investor_id,
           guarantor_name: formData.guarantor_name,
+          guarantor_id_number: formData.guarantor_id_number, // تم التمرير هنا
           guarantor_phone: formData.guarantor_phone,
           total_amount: formData.total_amount,
           installment_amount: formData.installment_amount,
@@ -119,7 +124,7 @@ export default function ContractsReport() {
       setShowModal(false)
       fetchData()
       setFormData({
-        investor_id: '', customer_name: '', national_id: '', phone: '', guarantor_name: '', guarantor_phone: '', 
+        investor_id: '', customer_name: '', national_id: '', phone: '', guarantor_name: '', guarantor_id_number: '', guarantor_phone: '', 
         total_amount: '', installment_amount: '', discount_amount: '0', start_date: new Date().toISOString().split('T')[0],
         sale_type: 'deferred', finance_company: ''
       })
@@ -160,6 +165,45 @@ export default function ContractsReport() {
     }
   }
 
+  // تصفية البيانات بناءً على شريط البحث
+  const filteredReports = reports.filter((r: any) => 
+    r.investor_name?.includes(searchTerm) || 
+    r.customer_name?.includes(searchTerm) || 
+    r.serial_number?.toString().includes(searchTerm)
+  )
+
+  // دالة استخراج التقرير للإكسل
+  const exportToExcel = () => {
+    let csvContent = "\uFEFF"; 
+    csvContent += "رقم العقد,المستثمر,العميل,هوية العميل,الكفيل,هوية الكفيل,إجمالي العقد,المدفوع,المتبقي,المتأخر,نوع البيع\n";
+    
+    filteredReports.forEach((r: any) => {
+      const row = [
+        r.serial_number,
+        r.investor_name || 'غير محدد',
+        r.customer_name,
+        r.customer_id_num || 'غير مسجل',
+        r.guarantor_name || 'لا يوجد',
+        r.guarantor_id_number || 'غير مسجل',
+        r.total_amount,
+        r.total_paid,
+        r.remaining_amount,
+        r.late_amount,
+        r.sale_type === 'finance' ? `تمويل (${r.finance_company})` : 'بيع آجل'
+      ].join(",");
+      csvContent += row + "\n";
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `تقرير_العقود_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   if (contractToPrint) {
     return (
       <div className="p-8 bg-white text-slate-900 min-h-screen font-sans" dir="rtl">
@@ -183,13 +227,21 @@ export default function ContractsReport() {
               <p><span className="font-bold text-slate-500">الطرف الأول (المستثمر):</span> <span className="font-black">{contractToPrint.investor_name}</span></p>
               <p><span className="font-bold text-slate-500">الطرف الثاني (العميل):</span> <span className="font-black">{contractToPrint.customer_name}</span></p>
               <p><span className="font-bold text-slate-500">رقم الهوية:</span> <span className="font-black">{contractToPrint.customer_id_num || 'غير مسجل'}</span></p>
-              <p><span className="font-bold text-slate-500">الكفيل الغارم:</span> <span className="font-black">{contractToPrint.guarantor_name || 'لا يوجد'}</span></p>
             </div>
             <div className="space-y-4">
-              <p><span className="font-bold text-slate-500">إجمالي قيمة العقد:</span> <span className="font-black">{contractToPrint.total_amount} ريال</span></p>
-              <p><span className="font-bold text-slate-500">قيمة القسط الشهري:</span> <span className="font-black">{contractToPrint.installment_amount} ريال</span></p>
-              <p><span className="font-bold text-slate-500">الرصيد المتبقي:</span> <span className="font-black">{contractToPrint.remaining_amount} ريال</span></p>
+              <p><span className="font-bold text-slate-500">الكفيل الغارم:</span> <span className="font-black">{contractToPrint.guarantor_name || 'لا يوجد'}</span></p>
+              <p><span className="font-bold text-slate-500">هوية الكفيل:</span> <span className="font-black">{contractToPrint.guarantor_id_number || 'لا يوجد'}</span></p>
               <p><span className="font-bold text-slate-500">نوع البيع:</span> <span className="font-black">{contractToPrint.sale_type === 'finance' ? `تمويل (${contractToPrint.finance_company})` : 'بيع آجل'}</span></p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-8 mb-8 text-lg border-t-2 border-slate-900 pt-6">
+            <div className="space-y-4">
+              <p><span className="font-bold text-slate-500">إجمالي قيمة العقد:</span> <span className="font-black text-blue-600">{contractToPrint.total_amount} ريال</span></p>
+              <p><span className="font-bold text-slate-500">الرصيد المتبقي:</span> <span className="font-black text-rose-600">{contractToPrint.remaining_amount} ريال</span></p>
+            </div>
+            <div className="space-y-4">
+              <p><span className="font-bold text-slate-500">قيمة القسط الشهري:</span> <span className="font-black text-emerald-600">{contractToPrint.installment_amount} ريال</span></p>
             </div>
           </div>
 
@@ -228,10 +280,9 @@ export default function ContractsReport() {
     )
   }
 
-  const totalAmount = reports.reduce((sum, r: any) => sum + Number(r.total_amount), 0)
-  const totalPaid = reports.reduce((sum, r: any) => sum + Number(r.total_paid), 0)
-  const totalRemaining = reports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
-  const totalLate = reports.reduce((sum, r: any) => sum + Number(r.late_amount), 0)
+  const totalAmount = filteredReports.reduce((sum, r: any) => sum + Number(r.total_amount), 0)
+  const totalPaid = filteredReports.reduce((sum, r: any) => sum + Number(r.total_paid), 0)
+  const totalRemaining = filteredReports.reduce((sum, r: any) => sum + Number(r.remaining_amount), 0)
 
   return (
     <div className="p-4 relative" dir="rtl">
@@ -239,9 +290,24 @@ export default function ContractsReport() {
         <div>
           <h2 className="text-2xl font-black text-white">إدارة تقارير العقود وملفات العملاء</h2>
         </div>
-        <button onClick={() => setShowModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-2">
-          <Plus className="w-5 h-5" /> إنشاء عقد تقسيط جديد
-        </button>
+        <div className="flex gap-3">
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder="بحث باسم العميل، المستثمر، أو رقم العقد..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-2 rounded-xl outline-none focus:border-emerald-500 w-72"
+            />
+            <Search className="absolute left-3 top-2.5 text-slate-500 w-5 h-5" />
+          </div>
+          <button onClick={exportToExcel} className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2">
+            <Download className="w-5 h-5" /> تصدير التقرير
+          </button>
+          <button onClick={() => setShowModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-2">
+            <Plus className="w-5 h-5" /> عقد جديد
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
@@ -249,6 +315,7 @@ export default function ContractsReport() {
           <thead className="bg-slate-800 text-slate-300">
             <tr>
               <th className="p-4">رقم العقد</th>
+              <th className="p-4">المستثمر</th>
               <th className="p-4">العميل</th>
               <th className="p-4">الهوية</th>
               <th className="p-4">الإجمالي</th>
@@ -259,9 +326,10 @@ export default function ContractsReport() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {reports.map((r: any, i) => (
+            {filteredReports.map((r: any, i) => (
               <tr key={i} className="hover:bg-slate-800/50">
                 <td className="p-4 font-mono text-emerald-400">{r.serial_number}</td>
+                <td className="p-4 font-bold text-slate-400">{r.investor_name || '-'}</td>
                 <td className="p-4 font-bold text-slate-200">{r.customer_name}</td>
                 <td className="p-4 text-slate-300 font-mono">{r.customer_id_num || '-'}</td>
                 <td className="p-4 font-bold text-blue-400">{r.total_amount}</td>
@@ -285,8 +353,13 @@ export default function ContractsReport() {
                 </td>
               </tr>
             ))}
+            {filteredReports.length === 0 && (
+              <tr>
+                <td colSpan={9} className="p-8 text-slate-500 font-bold">لا يوجد نتائج تطابق بحثك</td>
+              </tr>
+            )}
             <tr className="bg-slate-950 font-black">
-              <td className="p-4 text-left" colSpan={3}>الإجمالي الكلي للسوق</td>
+              <td className="p-4 text-left" colSpan={4}>إجمالي النتائج المعروضة</td>
               <td className="p-4 text-blue-400">{totalAmount}</td>
               <td className="p-4 text-rose-300">{totalRemaining}</td>
               <td className="p-4" colSpan={3}></td>
@@ -357,18 +430,22 @@ export default function ContractsReport() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="font-bold text-blue-400 border-b border-slate-800 pb-2">بيانات العقد</h4>
+                  <h4 className="font-bold text-blue-400 border-b border-slate-800 pb-2">بيانات العقد والكفيل</h4>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
+                    <div className="col-span-2">
                       <label className="block text-xs font-bold text-slate-400 mb-1">اسم الكفيل</label>
                       <input value={formData.guarantor_name} onChange={e => setFormData({...formData, guarantor_name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1">هوية الكفيل</label>
+                      <input value={formData.guarantor_id_number} onChange={e => setFormData({...formData, guarantor_id_number: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">جوال الكفيل</label>
                       <input value={formData.guarantor_phone} onChange={e => setFormData({...formData, guarantor_phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-3 gap-4 mt-2">
                     <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">إجمالي العقد *</label>
                       <input required type="number" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white outline-none font-mono text-blue-400 font-bold" />
