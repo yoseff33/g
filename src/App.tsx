@@ -1,72 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import React, { useEffect, useState } from 'react'
+import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { 
   LayoutDashboard, Users, FileText, FolderTree, Receipt, DollarSign, Percent, 
   BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck
-} from 'lucide-react';
+} from 'lucide-react'
 
 // Import All 12 Modules
-import DashboardView from './components/DashboardView';
-import InvestorsView from './components/InvestorsView';
-import ContractsView from './components/ContractsView';
-import ChartOfAccountsView from './components/ChartOfAccountsView';
-import JournalEntriesView from './components/JournalEntriesView';
-import ReceiptsPaymentsView from './components/ReceiptsPaymentsView';
-import ProfitDistributionView from './components/ProfitDistributionView';
-import FinancialReportsView from './components/FinancialReportsView';
-import AuditLogsView from './components/AuditLogsView';
-import SettingsView from './components/SettingsView';
-import UsersView from './components/UsersView';
-import ContractsReport from './ContractsReport';
-import { Profile } from './types';
+import DashboardView from './components/DashboardView'
+import InvestorsView from './components/InvestorsView'
+import ContractsView from './components/ContractsView'
+import ChartOfAccountsView from './components/ChartOfAccountsView'
+import JournalEntriesView from './components/JournalEntriesView'
+import ReceiptsPaymentsView from './components/ReceiptsPaymentsView'
+import ProfitDistributionView from './components/ProfitDistributionView'
+import FinancialReportsView from './components/FinancialReportsView'
+import AuditLogsView from './components/AuditLogsView'
+import SettingsView from './components/SettingsView'
+import UsersView from './components/UsersView'
+import ContractsReport from './ContractsReport'
+import AccountantDashboard from './AccountantDashboard'
+import { Profile } from './types'
 
 type ActiveView = 
   | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts' 
   | 'journal_entries' | 'vouchers' | 'distributions' | 'reports' 
-  | 'audit_logs' | 'settings' | 'users';
+  | 'audit_logs' | 'settings' | 'users' | 'accountant_dashboard'
 
 export default function App() {
-  const [session, setSession] = useState<any>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession] = useState<any>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   // Navigation states
-  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeView, setActiveView] = useState<ActiveView>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Authentication Forms states
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [authSuccess, setAuthSuccess] = useState('');
-  const [formLoading, setFormLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [formLoading, setFormLoading] = useState(false)
 
   useEffect(() => {
     // 1. Get current session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      setSession(session)
       if (session) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id)
       } else {
-        setAuthLoading(false);
+        setAuthLoading(false)
       }
-    });
+    })
 
     // 2. Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      setSession(session)
       if (session) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id)
       } else {
-        setProfile(null);
-        setAuthLoading(false);
+        setProfile(null)
+        setAuthLoading(false)
       }
-    });
+    })
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => subscription.unsubscribe()
+  }, [])
 
   async function fetchProfile(userId: string) {
     try {
@@ -74,23 +75,23 @@ export default function App() {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .single()
       
-      if (error) throw error;
-      setProfile(data);
+      if (error) throw error
+      setProfile(data)
     } catch (err) {
-      console.error('Error fetching user profile:', err);
+      console.error('Error fetching user profile:', err)
     } finally {
-      setAuthLoading(false);
+      setAuthLoading(false)
     }
   }
 
   // Auth Submit Handlers
   async function handleAuthSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setAuthError('');
-    setAuthSuccess('');
-    setFormLoading(true);
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    setFormLoading(true)
 
     try {
       if (isSignUp) {
@@ -103,62 +104,65 @@ export default function App() {
               full_name: fullName
             }
           }
-        });
-        if (error) throw error;
+        })
+        if (error) throw error
         
-        setAuthSuccess('تم إنشاء حسابك بنجاح! الرجاء مراجعة بريدك الإلكتروني لتأكيده.');
+        setAuthSuccess('تم إنشاء حسابك بنجاح! الرجاء مراجعة بريدك الإلكتروني لتأكيده.')
       } else {
         // Sign In
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
       }
     } catch (err: any) {
-      console.error(err);
-      setAuthError(err.message || 'فشل تنفيذ الإجراء. يرجى التحقق من المدخلات.');
+      console.error(err)
+      setAuthError(err.message || 'فشل تنفيذ الإجراء. يرجى التحقق من المدخلات.')
     } finally {
-      setFormLoading(false);
+      setFormLoading(false)
     }
   }
 
   async function handleLogOut() {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut()
   }
 
   // Active View Render Engine
   function renderActiveView() {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardView />;
+        return <DashboardView />
+      case 'accountant_dashboard':
+        return <AccountantDashboard />
       case 'investors':
-        return <InvestorsView />;
+        return <InvestorsView />
       case 'contracts':
-        return <ContractsView />;
+        return <ContractsView />
       case 'contracts_report':
-        return <ContractsReport />;
+        return <ContractsReport />
       case 'chart_of_accounts':
-        return <ChartOfAccountsView />;
+        return <ChartOfAccountsView />
       case 'journal_entries':
-        return <JournalEntriesView />;
+        return <JournalEntriesView />
       case 'vouchers':
-        return <ReceiptsPaymentsView />;
+        return <ReceiptsPaymentsView />
       case 'distributions':
-        return <ProfitDistributionView />;
+        return <ProfitDistributionView />
       case 'reports':
-        return <FinancialReportsView />;
+        return <FinancialReportsView />
       case 'audit_logs':
-        return <AuditLogsView />;
+        return <AuditLogsView />
       case 'settings':
-        return <SettingsView />;
+        return <SettingsView />
       case 'users':
-        return <UsersView />;
+        return <UsersView />
       default:
-        return <DashboardView />;
+        return <DashboardView />
     }
   }
 
   // Sidebar Menu Config
   const menuItems = [
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
+    { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3 },
     { id: 'investors', label: 'شؤون المستثمرين', icon: Users },
     { id: 'contracts', label: 'العقود الاستثمارية', icon: FileText },
     { id: 'contracts_report', label: 'تقرير عقود التقسيط', icon: FileText },
@@ -170,7 +174,7 @@ export default function App() {
     { id: 'audit_logs', label: 'سجلات التدقيق الأمني', icon: ShieldCheck },
     { id: 'users', label: 'صلاحيات المستخدمين', icon: UserCheck },
     { id: 'settings', label: 'إعدادات النظام والربط', icon: Settings },
-  ];
+  ]
 
   // Auth Loading State
   if (authLoading) {
@@ -179,7 +183,7 @@ export default function App() {
         <div className="w-12 h-12 border-4 border-slate-700 border-t-indigo-500 rounded-full animate-spin"></div>
         <p className="mt-4 text-sm font-semibold tracking-wider text-slate-400">جاري تشخيص الاتصال والتحقق من الجلسة الأمنية...</p>
       </div>
-    );
+    )
   }
 
   // Auth Portal Layout (RTL & Tajawal Styling)
@@ -256,7 +260,9 @@ export default function App() {
 
           <div className="text-center">
             <button 
-              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); setAuthSuccess(''); }}
+              onClick={() => { setIsSignUp(!isSignUp)
+ setAuthError('')
+ setAuthSuccess('') }}
               className="text-slate-400 hover:text-white text-xs font-semibold underline"
             >
               {isSignUp ? 'هل تملك حساباً بالفعل؟ سجل دخولك هنا' : 'هل أنت محاسب جديد؟ أنشئ حساباً هاهنا'}
@@ -264,7 +270,7 @@ export default function App() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Logged-In ERP Application Workspace (RTL)
@@ -308,12 +314,13 @@ export default function App() {
           {/* Main Navigation Links */}
           <nav className="space-y-1">
             {menuItems.map((item) => {
-              const IconComp = item.icon;
-              const isActive = activeView === item.id;
+              const IconComp = item.icon
+              const isActive = activeView === item.id
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveView(item.id as ActiveView); setSidebarOpen(false); }}
+                  onClick={() => { setActiveView(item.id as ActiveView)
+ setSidebarOpen(false) }}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                     isActive 
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black' 
@@ -323,7 +330,7 @@ export default function App() {
                   <IconComp className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </button>
-              );
+              )
             })}
           </nav>
         </div>
@@ -365,5 +372,5 @@ export default function App() {
         </main>
       </div>
     </div>
-  );
+  )
 }
