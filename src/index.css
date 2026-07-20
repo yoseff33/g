@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  direction: rtl;
+  text-align: right;
+}
+
+/* أوضاع السمة */
+:root {
+  --bg-primary: #f8fafc;
+  --text-primary: #1e293b;
+}
+
+.light {
+  --bg-primary: #f8fafc;
+  --text-primary: #1e293b;
+}
+
+/* تنسيق شريط التمرير داخل القائمة */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media print {
+  body {
+    background-color: white !important;
+    font-size: 12px;
+    direction: rtl;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-card {
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}
