@@ -1,5 +1,6 @@
 import React, { useEffect, useState, createContext, useContext } from 'react'
 import { supabase } from './lib/supabase'
+import type { Session } from '@supabase/supabase-js'
 import {
   LayoutDashboard, Users, FileText, FolderTree, Receipt, DollarSign, Percent,
   BarChart3, ShieldCheck, Settings, LogOut, ArrowLeft, ArrowRight, Menu, X, UserCheck,
@@ -23,7 +24,7 @@ import UsersView from './components/UsersView'
 import ContractsReport from './ContractsReport'
 import AccountantDashboard from './AccountantDashboard'
 import CustomReports from './CustomReports'
-import { Profile } from './types'
+import type { Profile } from './types'
 
 type ActiveView =
   | 'dashboard' | 'investors' | 'contracts' | 'contracts_report' | 'chart_of_accounts'
@@ -31,10 +32,24 @@ type ActiveView =
   | 'audit_logs' | 'settings' | 'users' | 'accountant_dashboard' | 'custom_reports'
 
 // ⭐ Theme Context
-const ThemeContext = createContext()
-export const useTheme = () => useContext(ThemeContext)
+type ThemeContextValue = {
+  dark: boolean
+  toggle: () => void
+}
 
-function ThemeProvider({ children }) {
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
+
+export function useTheme() {
+  const context = useContext(ThemeContext)
+
+  if (!context) {
+    throw new Error('useTheme must be used inside ThemeProvider')
+  }
+
+  return context
+}
+
+function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(() => localStorage.getItem('theme') !== 'light')
 
   useEffect(() => {
@@ -49,12 +64,12 @@ function ThemeProvider({ children }) {
   )
 }
 
-export default function App() {
-  const [session, setSession] = useState(null)
-  const [profile, setProfile] = useState(null)
+function AppContent() {
+  const [session, setSession] = useState<Session | null>(null)
+  const [, setProfile] = useState<Profile | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
 
-  const [activeView, setActiveView] = useState('dashboard')
+  const [activeView, setActiveView] = useState<ActiveView>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarMini, setSidebarMini] = useState(false) // للوضع المصغر
 
@@ -86,7 +101,7 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function fetchProfile(userId) {
+  async function fetchProfile(userId: string) {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -102,7 +117,7 @@ export default function App() {
     }
   }
 
-  async function handleAuthSubmit(e) {
+  async function handleAuthSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setAuthError('')
     setAuthSuccess('')
@@ -121,8 +136,9 @@ export default function App() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       }
-    } catch (err) {
-      setAuthError(err.message || 'فشل تنفيذ الإجراء. يرجى التحقق من المدخلات.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'فشل تنفيذ الإجراء. يرجى التحقق من المدخلات.'
+      setAuthError(message)
     } finally {
       setFormLoading(false)
     }
@@ -168,7 +184,7 @@ export default function App() {
     )
   }
 
-  const menuItems = [
+  const menuItems: Array<{ id: ActiveView; label: string; icon: React.ElementType }> = [
     { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard },
     { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3 },
     { id: 'custom_reports', label: 'التقارير المخصصة', icon: BarChart3 },
@@ -204,7 +220,7 @@ export default function App() {
   // واجهة المصادقة
   if (!session) {
     return (
-      <ThemeProvider>
+      <>
         <Toaster position="top-left" reverseOrder={false} />
         <div className={`min-h-screen flex items-center justify-center p-4 ${dark ? 'bg-slate-900' : 'bg-gray-100'}`} dir="rtl">
           <div className={`backdrop-blur border rounded-3xl max-w-md w-full p-8 space-y-6 shadow-2xl ${dark ? 'bg-slate-950/80 border-slate-800' : 'bg-white border-gray-200'}`}>
@@ -266,13 +282,13 @@ export default function App() {
             </div>
           </div>
         </div>
-      </ThemeProvider>
+      </>
     )
   }
 
   // واجهة التطبيق الرئيسية
   return (
-    <ThemeProvider>
+    <>
       <Toaster position="top-left" reverseOrder={false} toastOptions={{ style: { fontFamily: 'Tajawal, sans-serif' } }} />
       <div className={`min-h-screen flex font-sans select-none ${dark ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-gray-800'}`} dir="rtl">
 
@@ -376,6 +392,14 @@ export default function App() {
           </main>
         </div>
       </div>
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
     </ThemeProvider>
   )
 }
