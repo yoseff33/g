@@ -1,6 +1,0 @@
-{
-  "name": "Fazza ERP",
-  "description": "نظام فزاع المالي والاستثماري المتكامل لإدارة شؤون الشركاء، إصدار العقود الذكية، وتدوين قيود اليومية المزدوجة التلقائية وترحيل القوائم المالية والأستاذ العام.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
