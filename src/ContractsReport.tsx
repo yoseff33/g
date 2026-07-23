@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
-iimport { supabase } from './lib/supabase'
-iimport {
+import { supabase } from './lib/supabase'
+import {
   AlertCircle,
   CheckCircle,
   Download,
@@ -995,15 +995,15 @@ export default function ContractsReport() {
         <style>{`
           @page { size: A4 portrait; margin: 12mm; }
           @media print {
-            body { background: white !iimportant; }
-            .no-print { display: none !iimportant; }
+            body { background: white !important; }
+            .no-print { display: none !important; }
             #fazza_workspace aside,
-            #fazza_workspace header { display: none !iimportant; }
+            #fazza_workspace header { display: none !important; }
             #fazza_workspace {
-              margin: 0 !iimportant;
-              padding: 0 !iimportant;
-              width: 100% !iimportant;
-              background: white !iimportant;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              background: white !important;
             }
           }
         `}</style>
@@ -1016,29 +1016,29 @@ export default function ContractsReport() {
       <style>{`
         @page { size: A4 landscape; margin: 7mm; }
         @media print {
-          body { background: white !iimportant; color: black !iimportant; }
-          .no-print { display: none !iimportant; }
-          .print-container { margin: 0 !iimportant; padding: 0 !iimportant; }
-          .report-table { width: 100% !iimportant; border-collapse: collapse !iimportant; font-size: 7px !iimportant; }
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          .print-container { margin: 0 !important; padding: 0 !important; }
+          .report-table { width: 100% !important; border-collapse: collapse !important; font-size: 7px !important; }
           .report-table th,
           .report-table td {
-            border: 1px solid #000 !iimportant;
-            padding: 3px !iimportant;
-            color: black !iimportant;
-            background: white !iimportant;
-            text-align: center !iimportant;
-            white-space: nowrap !iimportant;
+            border: 1px solid #000 !important;
+            padding: 3px !important;
+            color: black !important;
+            background: white !important;
+            text-align: center !important;
+            white-space: nowrap !important;
           }
           #fazza_workspace aside,
-          #fazza_workspace header { display: none !iimportant; }
+          #fazza_workspace header { display: none !important; }
           #fazza_workspace {
-            margin: 0 !iimportant;
-            padding: 0 !iimportant;
-            width: 100% !iimportant;
-            background: white !iimportant;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: white !important;
           }
-          .hide-in-print { display: none !iimportant; }
-          .print-only { display: block !iimportant; }
+          .hide-in-print { display: none !important; }
+          .print-only { display: block !important; }
         }
       `}</style>
 
