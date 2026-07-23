@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Banknote,
   Building2,
+  CheckCircle2,
   CircleDollarSign,
   Download,
   FileText,
+  Filter,
   Landmark,
   PieChart,
   Printer,
   RefreshCw,
   TrendingUp,
   Wallet,
+  XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
@@ -75,6 +79,7 @@ type InvestorOperation = {
   realizedProfit: number
   startDate?: string
   status: string
+  rawStatus: string
   source: 'installment_contracts' | 'liquidity_package_orders'
 }
 
@@ -83,6 +88,76 @@ const packageStatusLabels: Record<string, string> = {
   approved: 'معتمدة',
   completed: 'مكتملة',
   cancelled: 'ملغاة',
+}
+
+
+function safeFormatDate(value?: string | null) {
+  if (!value) return '-'
+
+  const raw = String(value).trim()
+  if (!raw) return '-'
+
+  const normalized = raw.includes(' ') ? raw.replace(' ', 'T') : raw
+  let date = new Date(normalized)
+
+  if (Number.isNaN(date.getTime())) {
+    const dateOnly = raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+    if (!dateOnly) return '-'
+    date = new Date(`${dateOnly}T00:00:00`)
+  }
+
+  if (Number.isNaN(date.getTime())) return '-'
+
+  try {
+    return new Intl.DateTimeFormat('ar-SA', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date)
+  } catch {
+    return '-'
+  }
+}
+
+const operationStatusMeta: Record<
+  string,
+  { label: string; className: string }
+> = {
+  draft: {
+    label: 'بانتظار الاعتماد',
+    className:
+      'border-amber-500/20 bg-amber-500/10 text-amber-400',
+  },
+  approved: {
+    label: 'معتمدة وتحت التحصيل',
+    className:
+      'border-sky-500/20 bg-sky-500/10 text-sky-400',
+  },
+  completed: {
+    label: 'تم التحصيل',
+    className:
+      'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+  },
+  cancelled: {
+    label: 'ملغاة',
+    className:
+      'border-rose-500/20 bg-rose-500/10 text-rose-400',
+  },
+  active: {
+    label: 'نشطة',
+    className:
+      'border-sky-500/20 bg-sky-500/10 text-sky-400',
+  },
+  closed: {
+    label: 'مغلقة',
+    className:
+      'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+  },
+  terminated: {
+    label: 'منتهية',
+    className:
+      'border-rose-500/20 bg-rose-500/10 text-rose-400',
+  },
 }
 
 export default function InvestorPortalView() {
@@ -95,6 +170,10 @@ export default function InvestorPortalView() {
   const [error, setError] = useState('')
   const [actionLoading, setActionLoading] =
     useState<'withdrawal' | 'capital' | ''>('')
+  const [processingId, setProcessingId] = useState('')
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'draft' | 'approved' | 'completed' | 'cancelled'
+  >('all')
 
   const fetchInvestors = useCallback(async () => {
     setLoading(true)
@@ -195,7 +274,6 @@ export default function InvestorPortalView() {
           package_snapshot
         `)
         .eq('assigned_investor_id', selectedId)
-        .neq('status', 'cancelled')
         .order('created_at', { ascending: false }),
     ])
 
@@ -266,7 +344,11 @@ export default function InvestorPortalView() {
         expectedProfit: 0,
         realizedProfit: 0,
         startDate: contract.start_date,
-        status: contract.status || 'active',
+        status:
+          operationStatusMeta[contract.status || 'active']?.label ||
+          contract.status ||
+          'نشطة',
+        rawStatus: contract.status || 'active',
         source: 'installment_contracts',
       }
     })
@@ -289,7 +371,11 @@ export default function InvestorPortalView() {
       expectedProfit: Number(order.investor_net_profit || 0),
       realizedProfit: Number(order.realized_profit || 0),
       startDate: order.created_at,
-      status: packageStatusLabels[order.status] || order.status,
+      status:
+        operationStatusMeta[order.status]?.label ||
+        packageStatusLabels[order.status] ||
+        order.status,
+      rawStatus: order.status,
       source: 'liquidity_package_orders',
     }))
 
@@ -300,35 +386,53 @@ export default function InvestorPortalView() {
     )
   }, [contracts, packageOrders])
 
+
+  const visibleOperations = useMemo(() => {
+    if (statusFilter === 'all') return operations
+
+    return operations.filter(
+      (operation) => operation.rawStatus === statusFilter,
+    )
+  }, [operations, statusFilter])
+
+  const financialOperations = useMemo(
+    () =>
+      operations.filter(
+        (operation) =>
+          !['draft', 'cancelled'].includes(operation.rawStatus),
+      ),
+    [operations],
+  )
+
   const stats = useMemo(() => {
-    const funded = operations.reduce(
+    const funded = financialOperations.reduce(
       (sum, operation) => sum + operation.fundedAmount,
       0,
     )
-    const due = operations.reduce(
+    const due = financialOperations.reduce(
       (sum, operation) => sum + operation.dueAmount,
       0,
     )
-    const collected = operations.reduce(
+    const collected = financialOperations.reduce(
       (sum, operation) => sum + operation.collectedAmount,
       0,
     )
-    const outstanding = operations.reduce(
+    const outstanding = financialOperations.reduce(
       (sum, operation) => sum + operation.remainingAmount,
       0,
     )
-    const expectedProfit = operations.reduce(
+    const expectedProfit = financialOperations.reduce(
       (sum, operation) => sum + operation.expectedProfit,
       0,
     )
-    const realizedProfit = operations.reduce(
+    const realizedProfit = financialOperations.reduce(
       (sum, operation) => sum + operation.realizedProfit,
       0,
     )
-    const active = operations.filter(
+    const active = financialOperations.filter(
       (operation) =>
-        !['completed', 'closed', 'terminated', 'مكتملة'].includes(
-          operation.status,
+        !['completed', 'closed', 'terminated'].includes(
+          operation.rawStatus,
         ),
     ).length
     const collectionRate =
@@ -344,7 +448,7 @@ export default function InvestorPortalView() {
       active,
       collectionRate,
     }
-  }, [operations])
+  }, [financialOperations])
 
   async function createApprovalRequest(
     requestType: 'investor_withdrawal' | 'capital_change',
@@ -499,6 +603,146 @@ export default function InvestorPortalView() {
     }
   }
 
+
+  async function approvePackageOrder(operation: InvestorOperation) {
+    if (operation.source !== 'liquidity_package_orders') return
+
+    const confirmed = window.confirm(
+      `اعتماد ${operation.reference} وخصم ${formatCurrency(
+        operation.fundedAmount,
+      )} من رأس المال المتاح؟`,
+    )
+
+    if (!confirmed) return
+
+    setProcessingId(operation.id)
+
+    try {
+      const { error: approveError } = await supabase.rpc(
+        'approve_liquidity_package_order',
+        { p_order_id: operation.id },
+      )
+
+      if (approveError) throw approveError
+
+      toast.success('تم اعتماد الطلب وخصم رأس المال')
+      await refreshAll()
+    } catch (approveError) {
+      toast.error(
+        approveError instanceof Error
+          ? approveError.message
+          : 'تعذر اعتماد الطلب',
+      )
+    } finally {
+      setProcessingId('')
+    }
+  }
+
+  async function recordPackageCollection(
+    operation: InvestorOperation,
+    collectFullAmount = false,
+  ) {
+    if (operation.source !== 'liquidity_package_orders') return
+
+    if (operation.remainingAmount <= 0) {
+      toast.error('تم تحصيل العملية بالكامل')
+      return
+    }
+
+    let amount = operation.remainingAmount
+
+    if (!collectFullAmount) {
+      const value = window.prompt(
+        `أدخل مبلغ التحصيل — المتبقي ${formatCurrency(
+          operation.remainingAmount,
+        )}`,
+        String(operation.remainingAmount),
+      )
+
+      if (value === null) return
+
+      amount = Number(value.replace(/,/g, '').trim())
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0 ||
+        amount > operation.remainingAmount
+      ) {
+        toast.error('مبلغ التحصيل غير صحيح أو يتجاوز المتبقي')
+        return
+      }
+    } else {
+      const confirmed = window.confirm(
+        `تأكيد تحصيل كامل المتبقي ${formatCurrency(
+          operation.remainingAmount,
+        )}؟`,
+      )
+
+      if (!confirmed) return
+    }
+
+    setProcessingId(operation.id)
+
+    try {
+      const { error: collectionError } = await supabase.rpc(
+        'record_liquidity_package_collection',
+        {
+          p_order_id: operation.id,
+          p_amount: amount,
+        },
+      )
+
+      if (collectionError) throw collectionError
+
+      toast.success(
+        collectFullAmount
+          ? 'تم تحصيل كامل العملية وإغلاقها'
+          : 'تم تسجيل التحصيل',
+      )
+      await refreshAll()
+    } catch (collectionError) {
+      toast.error(
+        collectionError instanceof Error
+          ? collectionError.message
+          : 'تعذر تسجيل التحصيل',
+      )
+    } finally {
+      setProcessingId('')
+    }
+  }
+
+  async function cancelPackageOrder(operation: InvestorOperation) {
+    if (operation.source !== 'liquidity_package_orders') return
+
+    const confirmed = window.confirm(
+      `إلغاء ${operation.reference}؟ إذا سبق خصم رأس المال ولم يبدأ التحصيل فسيُعاد للمحفظة.`,
+    )
+
+    if (!confirmed) return
+
+    setProcessingId(operation.id)
+
+    try {
+      const { error: cancelError } = await supabase.rpc(
+        'cancel_liquidity_package_order',
+        { p_order_id: operation.id },
+      )
+
+      if (cancelError) throw cancelError
+
+      toast.success('تم إلغاء الطلب')
+      await refreshAll()
+    } catch (cancelError) {
+      toast.error(
+        cancelError instanceof Error
+          ? cancelError.message
+          : 'تعذر إلغاء الطلب',
+      )
+    } finally {
+      setProcessingId('')
+    }
+  }
+
   function openDocuments() {
     const section = document.getElementById('investor-operations')
 
@@ -524,7 +768,7 @@ export default function InvestorPortalView() {
       'الحالة',
     ]
 
-    const lines = operations.map((operation) =>
+    const lines = visibleOperations.map((operation) =>
       [
         operation.reference,
         operation.customerName,
@@ -606,6 +850,36 @@ export default function InvestorPortalView() {
 
   return (
     <div className="space-y-6 print:text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+
+          body {
+            background: white !important;
+          }
+
+          table {
+            font-size: 9px !important;
+            page-break-inside: auto;
+          }
+
+          thead {
+            display: table-header-group;
+          }
+
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between no-print">
         <div>
           <h1 className="text-2xl font-black text-white">
@@ -682,7 +956,7 @@ export default function InvestorPortalView() {
             </h1>
             <p className="mt-2">
               تاريخ الإصدار:{' '}
-              {formatDate(new Date().toISOString().split('T')[0])}
+              {safeFormatDate(new Date().toISOString())}
             </p>
           </div>
 
@@ -748,6 +1022,45 @@ export default function InvestorPortalView() {
             })}
           </div>
 
+          <div className="hidden print:block rounded-xl border border-black p-4">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div><strong>المستثمر:</strong> {investor.name}</div>
+              <div><strong>رقم الهوية:</strong> {investor.national_id || '-'}</div>
+              <div><strong>رقم الجوال:</strong> {investor.phone || '-'}</div>
+              <div><strong>رأس المال الإجمالي:</strong> {formatCurrency(investor.capital_total || 0)}</div>
+              <div><strong>رأس المال المتاح:</strong> {formatCurrency(investor.capital_available || 0)}</div>
+              <div><strong>عدد العمليات:</strong> {financialOperations.length}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:flex-row sm:items-center sm:justify-between no-print">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-emerald-400" />
+              <span className="font-black text-white">تصفية العمليات</span>
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value as
+                    | 'all'
+                    | 'draft'
+                    | 'approved'
+                    | 'completed'
+                    | 'cancelled',
+                )
+              }
+              className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 font-bold text-white"
+            >
+              <option value="all">كل الحالات</option>
+              <option value="draft">بانتظار الاعتماد</option>
+              <option value="approved">معتمدة وتحت التحصيل</option>
+              <option value="completed">تم التحصيل</option>
+              <option value="cancelled">ملغاة</option>
+            </select>
+          </div>
+
           <div
             id="investor-operations"
             className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 print:border-black print:bg-white"
@@ -779,11 +1092,12 @@ export default function InvestorPortalView() {
                     <th className="p-4">الربح المحقق</th>
                     <th className="p-4">البداية</th>
                     <th className="p-4">الحالة</th>
+                    <th className="p-4 no-print">الإجراءات</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-800 print:divide-black">
-                  {operations.map((operation) => (
+                  {visibleOperations.map((operation) => (
                     <tr key={`${operation.source}-${operation.id}`}>
                       <td className="p-4 font-mono font-black text-emerald-400 print:text-black">
                         {operation.reference}
@@ -818,20 +1132,110 @@ export default function InvestorPortalView() {
                         {formatCurrency(operation.realizedProfit)}
                       </td>
                       <td className="p-4 text-slate-400 print:text-black">
-                        {formatDate(operation.startDate)}
+                        {safeFormatDate(operation.startDate)}
                       </td>
                       <td className="p-4">
-                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-black text-sky-400 print:border-black print:text-black">
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-black print:border-black print:bg-white print:text-black ${
+                            operationStatusMeta[operation.rawStatus]?.className ||
+                            'border-slate-500/20 bg-slate-500/10 text-slate-300'
+                          }`}
+                        >
                           {operation.status}
                         </span>
+                      </td>
+
+                      <td className="p-4 no-print">
+                        {operation.source === 'liquidity_package_orders' ? (
+                          <div className="flex min-w-[260px] flex-wrap gap-2">
+                            {operation.rawStatus === 'draft' && (
+                              <button
+                                type="button"
+                                disabled={processingId === operation.id}
+                                onClick={() =>
+                                  void approvePackageOrder(operation)
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                اعتماد
+                              </button>
+                            )}
+
+                            {operation.rawStatus === 'approved' && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={processingId === operation.id}
+                                  onClick={() =>
+                                    void recordPackageCollection(operation)
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                                >
+                                  <Banknote className="h-4 w-4" />
+                                  تحصيل جزئي
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={processingId === operation.id}
+                                  onClick={() =>
+                                    void recordPackageCollection(
+                                      operation,
+                                      true,
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-50"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  تحصيل كامل
+                                </button>
+                              </>
+                            )}
+
+                            {['draft', 'approved'].includes(
+                              operation.rawStatus,
+                            ) && (
+                              <button
+                                type="button"
+                                disabled={processingId === operation.id}
+                                onClick={() =>
+                                  void cancelPackageOrder(operation)
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-black text-rose-400 disabled:opacity-50"
+                              >
+                                <XCircle className="h-4 w-4" />
+                                إلغاء
+                              </button>
+                            )}
+
+                            {operation.rawStatus === 'completed' && (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400">
+                                <CheckCircle2 className="h-4 w-4" />
+                                مكتملة
+                              </span>
+                            )}
+
+                            {operation.rawStatus === 'cancelled' && (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-black text-rose-400">
+                                <XCircle className="h-4 w-4" />
+                                ملغاة
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-500">
+                            تتم إدارة دفعات العقد من شاشة العقود
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
 
-                  {operations.length === 0 && (
+                  {visibleOperations.length === 0 && (
                     <tr>
                       <td
-                        colSpan={11}
+                        colSpan={12}
                         className="p-12 text-center font-bold text-slate-500"
                       >
                         لا توجد عمليات مرتبطة بالمستثمر.
@@ -841,6 +1245,24 @@ export default function InvestorPortalView() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="hidden print:block border-t border-black pt-5 text-sm">
+            <div className="flex items-end justify-between">
+              <div>
+                <p><strong>إجمالي رأس المال المستخدم:</strong> {formatCurrency(stats.funded)}</p>
+                <p><strong>إجمالي المحصل:</strong> {formatCurrency(stats.collected)}</p>
+                <p><strong>إجمالي المتبقي:</strong> {formatCurrency(stats.outstanding)}</p>
+                <p><strong>الربح المتوقع:</strong> {formatCurrency(stats.expectedProfit)}</p>
+                <p><strong>الربح المحقق:</strong> {formatCurrency(stats.realizedProfit)}</p>
+              </div>
+              <div className="w-64 border-t border-black pt-2 text-center">
+                توقيع واعتماد الإدارة
+              </div>
+            </div>
+            <p className="mt-5 text-center text-xs">
+              هذا الكشف صادر إلكترونيًا من نظام فزاع المالي.
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 no-print">
