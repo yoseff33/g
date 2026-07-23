@@ -14,6 +14,7 @@ type ApprovalRow = {
   status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   entity_type?: string
   entity_id?: string
+  payload?: Record<string, unknown> | null
   requested_by?: string
   reviewed_by?: string | null
   review_notes?: string | null
@@ -23,7 +24,7 @@ type ApprovalRow = {
 
 const typeLabels: Record<string, string> = {
   investor_withdrawal: 'سحب مستثمر',
-  capital_change: 'تعديل رأس المال',
+  capital_change: 'زيادة رأس المال',
   contract_change: 'تعديل عقد',
   payment_delete: 'إلغاء دفعة',
   profit_distribution: 'توزيع أرباح',
@@ -90,13 +91,94 @@ export default function ApprovalCenterView() {
     [rows],
   )
 
+  async function applyApprovedRequest(row: ApprovalRow) {
+    const amount = Number(row.amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('مبلغ الطلب غير صحيح')
+    }
+
+    if (row.entity_type !== 'investor' || !row.entity_id) {
+      throw new Error('الطلب غير مرتبط بمستثمر صحيح')
+    }
+
+    const { data: investor, error: investorError } = await supabase
+      .from('investors')
+      .select('id,name,capital_total,capital_available')
+      .eq('id', row.entity_id)
+      .single()
+
+    if (investorError) throw investorError
+
+    const currentTotal = Number(investor.capital_total || 0)
+    const currentAvailable = Number(investor.capital_available || 0)
+
+    if (row.request_type === 'capital_change') {
+      const { error } = await supabase
+        .from('investors')
+        .update({
+          capital_total: currentTotal + amount,
+          capital_available: currentAvailable + amount,
+        })
+        .eq('id', row.entity_id)
+
+      if (error) throw error
+      return
+    }
+
+    if (row.request_type === 'investor_withdrawal') {
+      if (amount > currentAvailable) {
+        throw new Error(
+          `الرصيد المتاح للمستثمر ${formatCurrency(currentAvailable)} فقط`,
+        )
+      }
+
+      const { error } = await supabase
+        .from('investors')
+        .update({
+          capital_total: Math.max(0, currentTotal - amount),
+          capital_available: currentAvailable - amount,
+        })
+        .eq('id', row.entity_id)
+
+      if (error) throw error
+    }
+  }
+
   async function review(row: ApprovalRow, nextStatus: 'approved' | 'rejected') {
     const action = nextStatus === 'approved' ? 'اعتماد' : 'رفض'
     const notes = window.prompt(`ملاحظات ${action} الطلب`, '')
     if (notes === null) return
 
+    const confirmed = window.confirm(
+      nextStatus === 'approved'
+        ? `هل أنت متأكد من اعتماد الطلب بقيمة ${formatCurrency(row.amount || 0)}؟ سيتم تنفيذ الأثر المالي مباشرة.`
+        : 'هل أنت متأكد من رفض الطلب؟',
+    )
+    if (!confirmed) return
+
     setProcessingId(row.id)
+
+    let financialEffectApplied = false
     try {
+      const { data: currentRequest, error: currentError } = await supabase
+        .from('approval_requests')
+        .select('status')
+        .eq('id', row.id)
+        .single()
+
+      if (currentError) throw currentError
+      if (currentRequest.status !== 'pending') {
+        throw new Error('تمت معالجة هذا الطلب مسبقًا')
+      }
+
+      if (
+        nextStatus === 'approved' &&
+        ['capital_change', 'investor_withdrawal'].includes(row.request_type)
+      ) {
+        await applyApprovedRequest(row)
+        financialEffectApplied = true
+      }
+
       const { data: userData } = await supabase.auth.getUser()
       const { error: updateError } = await supabase
         .from('approval_requests')
@@ -109,11 +191,54 @@ export default function ApprovalCenterView() {
         .eq('id', row.id)
         .eq('status', 'pending')
 
-      if (updateError) throw updateError
-      toast.success(nextStatus === 'approved' ? 'تم اعتماد الطلب' : 'تم رفض الطلب')
+      if (updateError) {
+        // تراجع بسيط لو تم الأثر المالي وفشل تحديث الطلب
+        if (financialEffectApplied && row.entity_id) {
+          const amount = Number(row.amount || 0)
+          const { data: investor } = await supabase
+            .from('investors')
+            .select('capital_total,capital_available')
+            .eq('id', row.entity_id)
+            .single()
+
+          if (investor) {
+            const total = Number(investor.capital_total || 0)
+            const available = Number(investor.capital_available || 0)
+
+            if (row.request_type === 'capital_change') {
+              await supabase
+                .from('investors')
+                .update({
+                  capital_total: Math.max(0, total - amount),
+                  capital_available: Math.max(0, available - amount),
+                })
+                .eq('id', row.entity_id)
+            } else if (row.request_type === 'investor_withdrawal') {
+              await supabase
+                .from('investors')
+                .update({
+                  capital_total: total + amount,
+                  capital_available: available + amount,
+                })
+                .eq('id', row.entity_id)
+            }
+          }
+        }
+        throw updateError
+      }
+
+      toast.success(
+        nextStatus === 'approved'
+          ? 'تم اعتماد الطلب وتنفيذ الأثر المالي'
+          : 'تم رفض الطلب',
+      )
       await fetchRows()
     } catch (reviewError) {
-      toast.error(reviewError instanceof Error ? reviewError.message : 'تعذر تحديث الطلب')
+      toast.error(
+        reviewError instanceof Error
+          ? reviewError.message
+          : 'تعذر تحديث الطلب',
+      )
     } finally {
       setProcessingId('')
     }
