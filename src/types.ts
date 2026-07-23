@@ -33,6 +33,8 @@ export interface Investor {
   bank_name: string | null;
   iban: string | null;
   status: 'active' | 'inactive';
+  capital_total?: number;
+  capital_available?: number;
   created_at: string;
   updated_at: string;
 }
