@@ -35,6 +35,7 @@ import {
   UserCheck,
   Users,
   WalletCards,
+  PackageOpen,
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -61,6 +62,7 @@ const FinancialReportsView = lazy(() => import('./components/FinancialReportsVie
 const AuditLogsView = lazy(() => import('./components/AuditLogsView'))
 const UsersView = lazy(() => import('./components/UsersView'))
 const SettingsView = lazy(() => import('./components/SettingsView'))
+const LiquidityPackagesView = lazy(() => import('./components/LiquidityPackagesView'))
 
 type ActiveView =
   | 'dashboard'
@@ -81,6 +83,7 @@ type ActiveView =
   | 'audit_logs'
   | 'users'
   | 'settings'
+  | 'liquidity_packages'
 
 type ThemeContextValue = {
   dark: boolean
@@ -165,6 +168,7 @@ const views: Record<ActiveView, React.LazyExoticComponent<React.ComponentType>> 
   audit_logs: AuditLogsView,
   users: UsersView,
   settings: SettingsView,
+  liquidity_packages: LiquidityPackagesView,
 }
 
 const menuItems: Array<{
@@ -176,6 +180,7 @@ const menuItems: Array<{
   { id: 'dashboard', label: 'لوحة التحكم العامة', icon: LayoutDashboard, section: 'الرئيسية' },
   { id: 'accountant_dashboard', label: 'لوحة المحاسب', icon: BarChart3, section: 'الرئيسية' },
   { id: 'collection_center', label: 'مركز التحصيل والسداد', icon: HandCoins, section: 'العمليات' },
+  { id: 'liquidity_packages', label: 'باقات السيولة والمنتجات', icon: PackageOpen, section: 'العمليات' },
   { id: 'contracts_report', label: 'عقود العملاء والأقساط', icon: FileText, section: 'العمليات' },
   { id: 'fair_distribution', label: 'التوزيع العادل', icon: Scale, section: 'العمليات' },
   { id: 'approvals', label: 'مركز الاعتمادات', icon: FileCheck2, section: 'العمليات' },
