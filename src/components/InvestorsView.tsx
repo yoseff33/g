@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, UserPlus, FileText, Phone, Mail, Landmark, CreditCard, X, Calendar, Printer, RefreshCw } from 'lucide-react';
+import { Search, UserPlus, FileText, Phone, Mail, Landmark, CreditCard, X, Calendar, Printer, RefreshCw, Trash2, Archive, Pencil } from 'lucide-react';
 import { Investor, Contract, Voucher } from '../types';
 
 export default function InvestorsView() {
@@ -25,6 +25,8 @@ export default function InvestorsView() {
   const [formBankName, setFormBankName] = useState('');
   const [formIban, setFormIban] = useState('');
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active');
+  const [formCapitalTotal, setFormCapitalTotal] = useState('0');
+  const [formCapitalAvailable, setFormCapitalAvailable] = useState('0');
   const [isEditing, setIsEditing] = useState(false);
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -69,6 +71,8 @@ export default function InvestorsView() {
       bank_name: formBankName || null,
       iban: formIban || null,
       status: formStatus,
+      capital_total: Number(formCapitalTotal || 0),
+      capital_available: Number(formCapitalAvailable || 0),
     };
 
     try {
@@ -106,6 +110,8 @@ export default function InvestorsView() {
     setFormBankName(inv.bank_name || '');
     setFormIban(inv.iban || '');
     setFormStatus(inv.status);
+    setFormCapitalTotal(String(inv.capital_total || 0));
+    setFormCapitalAvailable(String(inv.capital_available || 0));
     setIsEditing(true);
     setShowAddModal(true);
   }
@@ -150,6 +156,30 @@ export default function InvestorsView() {
     }
   }
 
+  async function handleArchiveInvestor(inv: Investor) {
+    if (!window.confirm(`إيقاف وأرشفة المستثمر ${inv.name}؟`)) return;
+    const { error } = await supabase.from('investors').update({ status: 'inactive', updated_at: new Date().toISOString() }).eq('id', inv.id);
+    if (error) { alert(error.message); return; }
+    await fetchInvestors();
+  }
+
+  async function handleDeleteInvestor(inv: Investor) {
+    const [contractsResult, installmentResult, vouchersResult] = await Promise.all([
+      supabase.from('contracts').select('*', { count: 'exact', head: true }).eq('investor_id', inv.id),
+      supabase.from('installment_contracts').select('*', { count: 'exact', head: true }).eq('investor_id', inv.id),
+      supabase.from('vouchers').select('*', { count: 'exact', head: true }).eq('investor_id', inv.id),
+    ]);
+    const linked = (contractsResult.count || 0) + (installmentResult.count || 0) + (vouchersResult.count || 0);
+    if (linked > 0) {
+      alert('لا يمكن حذف المستثمر لأنه مرتبط بعقود أو عمليات مالية. استخدم الأرشفة بدل الحذف.');
+      return;
+    }
+    if (!window.confirm(`حذف المستثمر ${inv.name} نهائيًا؟`)) return;
+    const { error } = await supabase.from('investors').delete().eq('id', inv.id);
+    if (error) { alert(error.message); return; }
+    await fetchInvestors();
+  }
+
   function resetForm() {
     setSelectedInvestor(null);
     setFormName('');
@@ -160,6 +190,8 @@ export default function InvestorsView() {
     setFormBankName('');
     setFormIban('');
     setFormStatus('active');
+    setFormCapitalTotal('0');
+    setFormCapitalAvailable('0');
     setIsEditing(false);
     setFormError('');
   }
@@ -285,12 +317,9 @@ export default function InvestorsView() {
                             >
                               كشف الحساب المالي
                             </button>
-                            <button 
-                              onClick={() => handleOpenEdit(inv)}
-                              className="text-[10px] font-bold border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                            >
-                              تعديل
-                            </button>
+                            <button onClick={() => handleOpenEdit(inv)} className="p-1.5 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white rounded-lg transition-colors" title="تعديل"><Pencil className="w-4 h-4" /></button>
+                            <button onClick={() => handleArchiveInvestor(inv)} className="p-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded-lg transition-colors" title="أرشفة"><Archive className="w-4 h-4" /></button>
+                            <button onClick={() => handleDeleteInvestor(inv)} className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg transition-colors" title="حذف"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </td>
                       </tr>
@@ -593,6 +622,17 @@ export default function InvestorsView() {
                     placeholder="SA0380000000000000000000"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono uppercase"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">رأس المال الإجمالي</label>
+                  <input type="number" min="0" step="0.01" value={formCapitalTotal} onChange={(e) => setFormCapitalTotal(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">رأس المال المتاح</label>
+                  <input type="number" min="0" step="0.01" value={formCapitalAvailable} onChange={(e) => setFormCapitalAvailable(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500" />
                 </div>
               </div>
 
