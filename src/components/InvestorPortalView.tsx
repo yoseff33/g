@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDate } from '../lib/finance'
 import { PageError, PageLoading } from './PageState'
@@ -49,6 +50,7 @@ export default function InvestorPortalView() {
   const [contracts, setContracts] = useState<InvestorContract[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionLoading, setActionLoading] = useState<'withdrawal' | 'capital' | ''>('')
 
   const fetchInvestors = useCallback(async () => {
     setLoading(true)
@@ -123,6 +125,140 @@ export default function InvestorPortalView() {
     const collectionRate = due > 0 ? Math.round((collected / due) * 100) : 0
     return { funded, due, collected, outstanding, active, collectionRate }
   }, [contracts])
+
+
+  async function createApprovalRequest(
+    requestType: 'investor_withdrawal' | 'capital_change',
+    amount: number,
+    description: string,
+  ) {
+    if (!investor) throw new Error('اختر المستثمر أولًا')
+
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!userData.user) throw new Error('الجلسة غير صالحة، سجّل الدخول من جديد')
+
+    const { error: insertError } = await supabase
+      .from('approval_requests')
+      .insert({
+        request_type: requestType,
+        title:
+          requestType === 'capital_change'
+            ? `طلب زيادة رأس مال — ${investor.name}`
+            : `طلب سحب مستثمر — ${investor.name}`,
+        description,
+        amount,
+        entity_type: 'investor',
+        entity_id: investor.id,
+        payload: {
+          investor_id: investor.id,
+          investor_name: investor.name,
+          operation:
+            requestType === 'capital_change'
+              ? 'increase'
+              : 'withdrawal',
+          amount,
+        },
+        status: 'pending',
+        requested_by: userData.user.id,
+      })
+
+    if (insertError) throw insertError
+  }
+
+  async function requestCapitalIncrease() {
+    if (!investor) return
+
+    const value = window.prompt(
+      `أدخل مبلغ زيادة رأس المال للمستثمر ${investor.name}`,
+      '',
+    )
+    if (value === null) return
+
+    const amount = Number(value.replace(/,/g, '').trim())
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('أدخل مبلغًا صحيحًا أكبر من صفر')
+      return
+    }
+
+    const notes = window.prompt('اكتب ملاحظة أو مصدر التحويل (اختياري)', '')
+    if (notes === null) return
+
+    setActionLoading('capital')
+    try {
+      await createApprovalRequest(
+        'capital_change',
+        amount,
+        `طلب زيادة رأس مال بقيمة ${formatCurrency(amount)} للمستثمر ${investor.name}.${notes.trim() ? ` الملاحظة: ${notes.trim()}` : ''}`,
+      )
+      toast.success('تم إرسال طلب زيادة رأس المال إلى مركز الاعتمادات')
+    } catch (requestError) {
+      toast.error(
+        requestError instanceof Error
+          ? requestError.message
+          : 'تعذر إنشاء طلب زيادة رأس المال',
+      )
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  async function requestWithdrawal() {
+    if (!investor) return
+
+    const available = Number(investor.capital_available || 0)
+    if (available <= 0) {
+      toast.error('لا يوجد رأس مال متاح للسحب حاليًا')
+      return
+    }
+
+    const value = window.prompt(
+      `أدخل مبلغ السحب — المتاح ${formatCurrency(available)}`,
+      '',
+    )
+    if (value === null) return
+
+    const amount = Number(value.replace(/,/g, '').trim())
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('أدخل مبلغًا صحيحًا أكبر من صفر')
+      return
+    }
+    if (amount > available) {
+      toast.error(`المبلغ يتجاوز الرصيد المتاح: ${formatCurrency(available)}`)
+      return
+    }
+
+    const notes = window.prompt('اكتب سبب السحب أو بيانات التحويل (اختياري)', '')
+    if (notes === null) return
+
+    setActionLoading('withdrawal')
+    try {
+      await createApprovalRequest(
+        'investor_withdrawal',
+        amount,
+        `طلب سحب بقيمة ${formatCurrency(amount)} من محفظة المستثمر ${investor.name}.${notes.trim() ? ` الملاحظة: ${notes.trim()}` : ''}`,
+      )
+      toast.success('تم إرسال طلب السحب إلى مركز الاعتمادات')
+    } catch (requestError) {
+      toast.error(
+        requestError instanceof Error
+          ? requestError.message
+          : 'تعذر إنشاء طلب السحب',
+      )
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  function openDocuments() {
+    const section = document.getElementById('investor-operations')
+    if (!section) {
+      toast.error('تعذر الوصول إلى جدول العمليات')
+      return
+    }
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    toast.success('اختر العملية المطلوبة من الجدول')
+  }
 
   function exportCsv() {
     const header = ['رقم العقد', 'العميل', 'نوع العملية', 'قيمة العقد', 'المحصل', 'المتبقي', 'الحالة']
@@ -269,17 +405,46 @@ export default function InvestorPortalView() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 no-print">
-            <button className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right hover:border-emerald-500/40">
+            <button
+              type="button"
+              onClick={openDocuments}
+              className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right transition hover:border-emerald-500/40"
+            >
               <FileText className="w-6 h-6 text-emerald-400" />
-              <span><strong className="block text-white">العقود والمستندات</strong><small className="text-slate-500">الوصول إلى نسخ العقود والإيصالات</small></span>
+              <span>
+                <strong className="block text-white">العقود والمستندات</strong>
+                <small className="text-slate-500">الوصول إلى عمليات المستثمر المرتبطة بالعقود</small>
+              </span>
             </button>
-            <button className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right hover:border-emerald-500/40">
+
+            <button
+              type="button"
+              onClick={requestWithdrawal}
+              disabled={actionLoading !== '' || Number(investor.capital_available || 0) <= 0}
+              className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right transition hover:border-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Wallet className="w-6 h-6 text-emerald-400" />
-              <span><strong className="block text-white">طلب سحب</strong><small className="text-slate-500">يُحوّل إلى مركز الاعتمادات</small></span>
+              <span>
+                <strong className="block text-white">
+                  {actionLoading === 'withdrawal' ? 'جاري إرسال الطلب...' : 'طلب سحب'}
+                </strong>
+                <small className="text-slate-500">يُحوّل إلى مركز الاعتمادات ويخصم بعد الموافقة</small>
+              </span>
             </button>
-            <button className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right hover:border-emerald-500/40">
+
+            <button
+              type="button"
+              onClick={requestCapitalIncrease}
+              disabled={actionLoading !== ''}
+              className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-right transition hover:border-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Landmark className="w-6 h-6 text-emerald-400" />
-              <span><strong className="block text-white">زيادة رأس المال</strong><small className="text-slate-500">إنشاء طلب تمويل إضافي</small></span>
+              <span>
+                <strong className="block text-white">
+                  {actionLoading === 'capital' ? 'جاري إرسال الطلب...' : 'زيادة رأس المال'}
+                </strong>
+                <small className="text-slate-500">إنشاء طلب زيادة وتحديث المحفظة بعد الاعتماد</small>
+              </span>
             </button>
           </div>
         </>
